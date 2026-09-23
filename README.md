@@ -9,51 +9,163 @@ com Tkinter e banco de dados MySQL.
 - Saulo
 
 ## Funcionalidades
-- Janela de Login e Janela Principal.
-- CRUD completo de notícias (criar, listar, editar, excluir).
-- Cadastro de categorias e autores.
+- Login e Cadastro com layout editorial (baseado no protótipo do Stitch),
+  usuário/e-mail + senha com hash **bcrypt**.
+- **Verificação em duas etapas (2FA) por código enviado por e-mail** —
+  código de 6 dígitos, válido por 10 minutos, enviado via SMTP.
+- **Login com o Google** (OAuth 2.0), tanto na tela de login quanto na de
+  cadastro — cria a conta automaticamente no primeiro acesso.
+- Janela Principal com CRUD completo de notícias (criar, listar, editar,
+  excluir), cadastro de categorias e autores.
 - Gráfico de notícias por categoria (matplotlib).
-- Registro de erros em `error.log`.
-- Código orientado a objetos, dividido em módulos (`main.py`, `database.py`,
-  `gui.py`, `logger.py`).
+- Aba de Segurança para ativar/desativar o 2FA depois do cadastro.
+- Registro de eventos e erros em `logs/error.log`.
 
 ## Estrutura do projeto
 ```
-newsmanager/
-├── main.py            # Inicia a aplicação
-├── database.py        # Conexão MySQL e operações CRUD
-├── gui.py              # Janelas Tkinter (login, principal, gráfico)
-├── logger.py           # Registro de erros
-├── requirements.txt    # Dependências
-├── error.log            # Arquivo de logs (gerado em runtime)
-├── database/
-│   └── schema.sql       # Script de criação do banco e tabelas
-├── docs/                 # Documentação em PDF (diagrama de classes, etc.)
-└── screenshots/           # Prints das telas da aplicação
+News-Manager-main/
+├── main.py                        # Ponto de entrada — sempre rode a partir daqui
+├── requirements.txt                # Dependências
+├── README.md
+├── .gitignore
+├── app/                             # Código da aplicação
+│   ├── __init__.py
+│   ├── gui.py                       # Janelas Tkinter (login, cadastro, 2FA, principal)
+│   ├── database.py                  # Conexão MySQL e operações CRUD
+│   ├── auth.py                      # Hash de senha, 2FA por e-mail e login com Google
+│   ├── theme.py                     # Paleta de cores e tipografia (estilo editorial)
+│   └── logger.py                    # Registro de eventos/erros
+├── config/
+│   ├── client_secret.json.example   # Modelo das credenciais OAuth do Google
+│   └── email_config.json.example    # Modelo das credenciais SMTP (2FA por e-mail)
+│       (os arquivos de verdade, sem ".example", também vão aqui — nunca commitados)
+├── sql/
+│   ├── schema.sql                   # Script de criação do banco e tabelas (do zero)
+│   ├── migration_auth.sql           # Migração da versão bem antiga (texto puro) para a atual
+│   └── migration_totp_para_email.sql  # Migração de quem já tinha a versão com TOTP/QR Code
+├── design/
+│   └── LayoutStitch/                 # Protótipo de telas gerado no Stitch (referência visual)
+├── logs/                              # Gerado em runtime (error.log)
+├── docs/                               # Documentação em PDF (diagrama de classes, etc.)
+└── screenshots/                         # Prints das telas da aplicação
 ```
 
 ## Como executar
 
 ### 1. Instalar dependências
+Na raiz do projeto:
 ```bash
 pip install -r requirements.txt
 ```
+(O envio de e-mail usa só bibliotecas nativas do Python — `smtplib`,
+`hashlib`, `secrets` — não precisa instalar nada além disso.)
 
 ### 2. Configurar o banco de dados MySQL
-Crie o banco e as tabelas executando o script:
+
+**Banco novo (ainda não existe):**
 ```bash
-mysql -u root -p < database/schema.sql
+mysql -u root -p < sql/schema.sql
 ```
 
-Um usuário de teste já é criado:
-- **usuário:** `admin`
-- **senha:** `admin123`
+**Banco criado com a versão bem antiga** (tabela `usuarios` só com
+`usuario`/`senha` em texto puro):
+```bash
+mysql -u root -p newsmanager < sql/migration_auth.sql
+```
 
-### 3. Ajustar a conexão
+**Banco que já tinha a versão intermediária com 2FA por TOTP/QR Code**
+(colunas `totp_secret`/`totp_ativo`):
+```bash
+mysql -u root -p newsmanager < sql/migration_totp_para_email.sql
+```
+
+Leia os comentários dentro de cada script. Como as senhas usam hash bcrypt
+(calculado em Python), o jeito mais simples de testar depois de migrar a
+partir da versão bem antiga é recriar os usuários pela própria tela
+**Criar conta** do aplicativo. Não existe mais um usuário `admin`/`admin123`
+pré-cadastrado.
+
+### 3. Ajustar a conexão com o MySQL
 Edite as credenciais em `main.py`, na criação de `DatabaseManager`
 (`host`, `user`, `password`, `database`), conforme o seu ambiente.
 
-### 4. Rodar a aplicação
+### 4. Configurar o envio de e-mail (necessário para o 2FA)
+O código de verificação é enviado por SMTP. O jeito mais simples para um
+projeto de faculdade é usar uma conta do Gmail com **Senha de App**:
+
+1. Na Conta Google que vai enviar os e-mails, ative a **Verificação em
+   duas etapas** (em myaccount.google.com/security) — é pré-requisito
+   para gerar senhas de app.
+2. Ainda em "Segurança", acesse **Senhas de app**
+   (myaccount.google.com/apppasswords), crie uma nova senha para o app
+   "NewsManager" e copie o código de 16 letras gerado.
+   - Se a opção "Senhas de app" não aparecer, é porque a conta usa
+     verificação em 2 etapas de outro jeito (chave de segurança, etc.) —
+     nesse caso, use uma conta pessoal comum do Gmail só para testes, ou
+     um serviço como o Mailtrap/SendGrid (mesma configuração, mudando
+     `smtp_host`/`smtp_porta`).
+3. Copie `config/email_config.json.example` para `config/email_config.json`
+   e preencha:
+   ```json
+   {
+     "smtp_host": "smtp.gmail.com",
+     "smtp_porta": 587,
+     "smtp_usuario": "seu.email@gmail.com",
+     "smtp_senha": "a-senha-de-app-de-16-letras",
+     "remetente_nome": "NewsManager"
+   }
+   ```
+4. **Nunca** faça commit do `config/email_config.json` de verdade — ele já
+   está no `.gitignore`. Cada integrante que for rodar o projeto localmente
+   precisa da sua própria cópia (ou combinar de usar a mesma, compartilhada
+   fora do Git).
+
+Se quiser usar outro provedor de e-mail (Outlook, um SMTP da faculdade,
+etc.), só troca `smtp_host`/`smtp_porta`/`smtp_usuario`/`smtp_senha` —
+o código não depende do Gmail especificamente.
+
+### 5. Configurar o login com o Google (necessário para o botão "Entrar/Cadastrar com o Google")
+1. Acesse o [Google Cloud Console](https://console.cloud.google.com/) e
+   crie (ou reaproveite) um projeto.
+2. Em **APIs e Serviços → Tela de consentimento OAuth**, configure o app
+   como "Externo" (ou "Interno", se for Workspace) e adicione os escopos
+   `openid`, `.../auth/userinfo.email` e `.../auth/userinfo.profile`.
+   - Enquanto o app estiver em modo de teste, adicione os e-mails da
+     equipe em **Usuários de teste** (senão o Google bloqueia o login).
+3. Em **APIs e Serviços → Credenciais → Criar credenciais → ID do cliente
+   OAuth**, escolha o tipo de aplicativo **"Aplicativo para computador"**
+   (Desktop app).
+4. Baixe o JSON gerado, renomeie para `client_secret.json` e coloque
+   dentro da pasta **`config/`** (`config/client_secret.json`). Use
+   `config/client_secret.json.example` como referência do formato esperado.
+5. **Nunca** faça commit do `client_secret.json` de verdade — ele já está
+   no `.gitignore`.
+
+Ao clicar em "Entrar com o Google" ou "Cadastrar com o Google", o
+NewsManager abre o navegador padrão para o login e sobe um servidor local
+temporário só para capturar o retorno do Google — não é preciso nenhuma
+configuração de servidor/deploy.
+
+### 6. Como funciona o 2FA por e-mail
+- Na tela de **Cadastro**, a caixa "Ativar verificação em duas etapas por
+  e-mail" vem marcada por padrão. Ao criar a conta, o sistema já envia um
+  código de 6 dígitos para o e-mail informado; digitando o código
+  corretamente, o 2FA fica ativado.
+- É possível pular a ativação e configurar depois, na aba **Segurança**
+  da janela principal.
+- No login tradicional (usuário/senha), se a conta tiver 2FA ativo, o
+  sistema envia (de novo) um código por e-mail e pede que ele seja
+  digitado antes de liberar o acesso. Tem um link "Reenviar código" caso
+  o e-mail demore ou não chegue.
+- O código expira em 10 minutos e só pode ser usado uma vez.
+- Contas que entram via **Google** não passam pelo 2FA do NewsManager
+  nesse fluxo, já que a própria Conta Google autentica o usuário.
+- Se `config/email_config.json` não existir ou estiver incompleto, o
+  sistema avisa exatamente o que falta configurar, em vez de travar.
+
+### 7. Rodar a aplicação
+Sempre a partir da raiz do projeto (é daqui que os caminhos relativos de
+`config/` e `logs/` são resolvidos):
 ```bash
 python main.py
 ```

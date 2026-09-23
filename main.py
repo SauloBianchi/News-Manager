@@ -5,9 +5,9 @@ Inicializa o logger, o gerenciador de banco de dados e abre a
 janela de login.
 """
 
-from logger import Logger
-from database import DatabaseManager
-from gui import LoginWindow
+from app.logger import Logger
+from app.database import DatabaseManager
+from app.gui import LoginWindow
 
 
 def main():

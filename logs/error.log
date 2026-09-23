@@ -1,0 +1,63 @@
+2026-09-23 16:26:17,417 - INFO - Aplicação NewsManager iniciada.
+2026-09-23 16:27:23,599 - ERROR - Falha ao conectar ao banco de dados | Exceção: 2003: Can't connect to MySQL server on 'localhost:3306' (Errno 10061: Nenhuma conexão pôde ser feita porque a máquina de destino as recusou ativamente)
+2026-09-23 16:30:22,692 - INFO - Aplicação NewsManager encerrada.
+2026-09-23 16:44:27,677 - INFO - Aplicação NewsManager iniciada.
+2026-09-23 16:45:09,839 - INFO - package: mysql.connector.plugins
+2026-09-23 16:45:09,839 - INFO - plugin_name: mysql_native_password
+2026-09-23 16:45:09,840 - INFO - AUTHENTICATION_PLUGIN_CLASS: MySQLNativePasswordAuthPlugin
+2026-09-23 16:45:09,842 - INFO - Conexão com o banco de dados estabelecida.
+2026-09-23 16:45:10,052 - INFO - Conta criada: Saulo
+2026-09-23 16:45:45,650 - INFO - Conexão com o banco de dados encerrada.
+2026-09-23 16:45:45,650 - INFO - Aplicação NewsManager encerrada.
+2026-09-23 17:06:41,603 - INFO - Aplicação NewsManager iniciada.
+2026-09-23 17:06:58,773 - INFO - package: mysql.connector.plugins
+2026-09-23 17:06:58,773 - INFO - plugin_name: mysql_native_password
+2026-09-23 17:06:58,774 - INFO - AUTHENTICATION_PLUGIN_CLASS: MySQLNativePasswordAuthPlugin
+2026-09-23 17:06:58,775 - INFO - Conexão com o banco de dados estabelecida.
+2026-09-23 17:06:58,985 - INFO - Login bem-sucedido: Saulo
+2026-09-23 17:07:21,880 - INFO - Conexão com o banco de dados encerrada.
+2026-09-23 17:07:21,880 - INFO - Aplicação NewsManager encerrada.
+2026-09-23 17:08:14,444 - INFO - Aplicação NewsManager iniciada.
+2026-09-23 17:08:25,518 - INFO - package: mysql.connector.plugins
+2026-09-23 17:08:25,518 - INFO - plugin_name: mysql_native_password
+2026-09-23 17:08:25,519 - INFO - AUTHENTICATION_PLUGIN_CLASS: MySQLNativePasswordAuthPlugin
+2026-09-23 17:08:25,520 - INFO - Conexão com o banco de dados estabelecida.
+2026-09-23 17:08:25,729 - INFO - Login bem-sucedido: Saulo
+2026-09-23 17:15:16,585 - INFO - Aplicação NewsManager iniciada.
+2026-09-23 17:15:27,545 - INFO - package: mysql.connector.plugins
+2026-09-23 17:15:27,545 - INFO - plugin_name: mysql_native_password
+2026-09-23 17:15:27,546 - INFO - AUTHENTICATION_PLUGIN_CLASS: MySQLNativePasswordAuthPlugin
+2026-09-23 17:15:27,547 - INFO - Conexão com o banco de dados estabelecida.
+2026-09-23 17:15:27,754 - INFO - Login bem-sucedido: Saulo
+2026-09-23 17:15:30,743 - ERROR - Erro ao enviar e-mail de verificação | Exceção: Expecting value: line 2 column 16 (char 17)
+2026-09-23 17:16:08,576 - ERROR - Erro ao enviar e-mail de verificação | Exceção: Expecting value: line 2 column 16 (char 17)
+2026-09-23 17:18:35,205 - INFO - Conexão com o banco de dados encerrada.
+2026-09-23 17:18:35,205 - INFO - Aplicação NewsManager encerrada.
+2026-09-23 17:19:01,670 - INFO - Aplicação NewsManager iniciada.
+2026-09-23 17:19:11,943 - INFO - package: mysql.connector.plugins
+2026-09-23 17:19:11,943 - INFO - plugin_name: mysql_native_password
+2026-09-23 17:19:11,944 - INFO - AUTHENTICATION_PLUGIN_CLASS: MySQLNativePasswordAuthPlugin
+2026-09-23 17:19:11,945 - INFO - Conexão com o banco de dados estabelecida.
+2026-09-23 17:19:12,155 - INFO - Login bem-sucedido: Saulo
+2026-09-23 17:19:34,430 - INFO - 2FA (e-mail) ativado para: Saulo
+2026-09-23 17:19:41,838 - INFO - Conexão com o banco de dados encerrada.
+2026-09-23 17:19:41,838 - INFO - Aplicação NewsManager encerrada.
+2026-09-23 17:19:43,891 - INFO - Aplicação NewsManager iniciada.
+2026-09-23 17:19:53,550 - INFO - package: mysql.connector.plugins
+2026-09-23 17:19:53,550 - INFO - plugin_name: mysql_native_password
+2026-09-23 17:19:53,551 - INFO - AUTHENTICATION_PLUGIN_CLASS: MySQLNativePasswordAuthPlugin
+2026-09-23 17:19:53,552 - INFO - Conexão com o banco de dados estabelecida.
+2026-09-23 17:20:20,603 - INFO - Login bem-sucedido: Saulo
+2026-09-23 17:20:36,938 - INFO - Conexão com o banco de dados encerrada.
+2026-09-23 17:20:36,938 - INFO - Aplicação NewsManager encerrada.
+2026-09-23 17:41:39,496 - INFO - Aplicação NewsManager iniciada.
+2026-09-23 17:41:44,601 - INFO - Please visit this URL to authorize this application: https://accounts.google.com/o/oauth2/auth?response_type=code&client_id=1084176106227-bvh33i7atei31gb3guthrlqlqo8qdn90.apps.googleusercontent.com&redirect_uri=http%3A%2F%2Flocalhost%3A61391%2F&scope=openid+https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fuserinfo.email+https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fuserinfo.profile&state=fIQFlHnzkBBXhF6BqbkHs2XO44ZgUW&code_challenge=5l1wPeIIRI3FrqIJN7__LtyNDRGNI7nXDG-z34-nziM&code_challenge_method=S256&prompt=select_account&access_type=offline
+2026-09-23 17:42:15,186 - INFO - "GET /?state=fIQFlHnzkBBXhF6BqbkHs2XO44ZgUW&iss=https%3A%2F%2Faccounts.google.com&code=4%2F0AXlqoi5vu0Jv1D6dEqVGXcb7pU9UYSUfsbrFlKLsQ0bRCH6Wc0rHLQCpIn0B9PEXocoQ3Q&scope=email+profile+https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fuserinfo.profile+https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fuserinfo.email+openid&authuser=0&hd=aluno.farroupilha.ifrs.edu.br&prompt=consent HTTP/1.1" 200 65
+2026-09-23 17:42:16,516 - INFO - package: mysql.connector.plugins
+2026-09-23 17:42:16,517 - INFO - plugin_name: mysql_native_password
+2026-09-23 17:42:16,518 - INFO - AUTHENTICATION_PLUGIN_CLASS: MySQLNativePasswordAuthPlugin
+2026-09-23 17:42:16,519 - INFO - Conexão com o banco de dados estabelecida.
+2026-09-23 17:42:16,524 - INFO - Login via Google: saulo.bianchi@aluno.farroupilha.ifrs.edu.br
+2026-09-23 17:42:16,529 - INFO - Login bem-sucedido: Saulo
+2026-09-23 17:43:02,119 - INFO - Conexão com o banco de dados encerrada.
+2026-09-23 17:43:02,119 - INFO - Aplicação NewsManager encerrada.
