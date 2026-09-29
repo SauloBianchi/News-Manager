@@ -104,18 +104,34 @@ class EmailOTPManager:
 
 
 # ---------------------------------------------------------------------------
-# Envio do código por e-mail (SMTP)
+# Envio do código por e-mail (SMTP), com um layout HTML no estilo editorial
+# do app (o mesmo usado nas telas do Tkinter — ver theme.py).
 # ---------------------------------------------------------------------------
 # As credenciais do servidor de e-mail ficam em config/email_config.json
-# (nunca commitado). Veja config/email_config.json e o passo a
+# (nunca commitado). Veja config/email_config.json.example e o passo a
 # passo no README para configurar com uma conta do Gmail (ou outro SMTP).
 EMAIL_CONFIG_FILE = os.path.join("config", "email_config.json")
 
+# Logo opcional: se existir um arquivo PNG/JPG nesse caminho, ele é
+# embutido no e-mail (via Content-ID) no lugar do "logo" de texto. Se não
+# existir, o e-mail usa só o nome "NewsManager" estilizado — sem quebrar.
+LOGO_FILE = os.path.join("assets", "logo.png")
+_LOGO_CID = "logo_newsmanager"
+
+# Mesma paleta de theme.py, duplicada aqui em hexadecimal puro para não
+# precisar importar tkinter dentro de auth.py só por causa das cores.
+_COR_FUNDO = "#F4F0E8"
+_COR_SUPERFICIE = "#FFFFFF"
+_COR_TEXTO = "#1C1C17"
+_COR_TEXTO_SECUNDARIO = "#58413F"
+_COR_PRIMARIA = "#8B1E1E"
+_COR_BORDA = "#D5CEBF"
+
 
 class EmailSender:
-    """Envia o e-mail com o código de verificação usando smtplib (biblioteca
-    nativa do Python — não é necessário instalar nada além do que já vem
-    no requirements.txt)."""
+    """Envia e-mails com o layout editorial do NewsManager usando smtplib
+    (biblioteca nativa do Python — não precisa instalar nada além do que
+    já vem no requirements.txt)."""
 
     @staticmethod
     def configuracao_disponivel() -> bool:
@@ -141,21 +157,125 @@ class EmailSender:
         return config
 
     @staticmethod
-    def enviar_codigo_verificacao(destinatario: str, nome: str, codigo: str):
+    def _montar_cabecalho_logo() -> str:
+        """Retorna o HTML do cabeçalho: <img> referenciando o logo (se
+        existir um arquivo em assets/logo.png) ou um "logo" de texto."""
+        if os.path.exists(LOGO_FILE):
+            return (
+                f'<img src="cid:{_LOGO_CID}" alt="NewsManager" width="120" '
+                'style="display:block;margin:0 auto;border:0;">'
+            )
+        return (
+            f'<div style="font-family: Georgia, \'Times New Roman\', serif; '
+            f'font-size:28px; font-weight:700; color:{_COR_TEXTO}; text-align:center;">'
+            "NewsManager</div>"
+        )
+
+    @staticmethod
+    def _montar_html(nome: str, codigo: str, titulo: str, texto_intro: str) -> str:
+        cabecalho_logo = EmailSender._montar_cabecalho_logo()
+        return f"""\
+<html>
+  <body style="margin:0; padding:0; background-color:{_COR_FUNDO};
+               font-family: Arial, Helvetica, sans-serif;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0"
+           style="background-color:{_COR_FUNDO}; padding:32px 16px;">
+      <tr>
+        <td align="center">
+          <table role="presentation" width="480" cellpadding="0" cellspacing="0"
+                 style="background-color:{_COR_SUPERFICIE}; border:1px solid {_COR_BORDA};">
+            <tr><td style="height:4px; background-color:{_COR_TEXTO}; font-size:0; line-height:0;">&nbsp;</td></tr>
+            <tr>
+              <td style="padding:28px 32px 8px;">
+                {cabecalho_logo}
+                <div style="text-align:center; font-size:10px; letter-spacing:1px;
+                            color:{_COR_TEXTO_SECUNDARIO}; text-transform:uppercase; margin-top:6px;">
+                  Terminal da Reda&ccedil;&atilde;o &amp; Gest&atilde;o Editorial
+                </div>
+                <hr style="border:none; border-top:1px solid {_COR_BORDA}; margin:20px 0;">
+                <p style="font-size:9px; letter-spacing:1px; color:{_COR_PRIMARIA};
+                          text-transform:uppercase; font-weight:bold; margin:0 0 10px;">
+                  {titulo}
+                </p>
+                <p style="font-size:15px; color:{_COR_TEXTO}; margin:0 0 14px;">
+                  Ol&aacute;, {nome}!
+                </p>
+                <p style="font-size:14px; color:{_COR_TEXTO}; margin:0 0 22px; line-height:1.5;">
+                  {texto_intro}
+                </p>
+                <div style="text-align:center; margin:0 0 22px;">
+                  <span style="display:inline-block; padding:14px 22px; background-color:{_COR_FUNDO};
+                               border:1px dashed {_COR_TEXTO}; font-size:28px; font-weight:bold;
+                               letter-spacing:6px; color:{_COR_TEXTO};">
+                    {codigo}
+                  </span>
+                </div>
+                <p style="font-size:12px; color:{_COR_TEXTO_SECUNDARIO}; margin:0 0 24px;">
+                  Esse c&oacute;digo expira em {EmailOTPManager.VALIDADE_MINUTOS} minutos.
+                  Se voc&ecirc; n&atilde;o solicitou isso, pode ignorar este e-mail.
+                </p>
+              </td>
+            </tr>
+            <tr><td style="height:4px; background-color:{_COR_TEXTO}; font-size:0; line-height:0;">&nbsp;</td></tr>
+          </table>
+          <p style="font-size:10px; letter-spacing:1px; color:{_COR_TEXTO_SECUNDARIO};
+                    text-transform:uppercase; margin-top:16px;">
+            NewsManager &bull; Gazeta Editorial Corp
+          </p>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>
+"""
+
+    @staticmethod
+    def enviar_codigo_verificacao(
+        destinatario: str,
+        nome: str,
+        codigo: str,
+        titulo: str = "Verificação em Duas Etapas",
+        texto_intro: str = ("Use o código abaixo para confirmar essa ação. "
+                             "Não compartilhe esse código com ninguém."),
+    ):
+        """Envia o código de verificação por e-mail, em HTML (com o layout
+        do app) e com uma versão em texto puro como reserva, para clientes
+        de e-mail que não exibem HTML.
+
+        Os parâmetros `titulo`/`texto_intro` permitem reaproveitar o mesmo
+        envio para contextos diferentes (2FA no login, ativação do 2FA no
+        cadastro, redefinição de senha, etc.), mudando só a mensagem.
+        """
         config = EmailSender._carregar_configuracao()
 
         mensagem = EmailMessage()
-        mensagem["Subject"] = "Seu código de verificação — NewsManager"
+        mensagem["Subject"] = f"{titulo} — NewsManager"
         remetente_nome = config.get("remetente_nome", "NewsManager")
         mensagem["From"] = f"{remetente_nome} <{config['smtp_usuario']}>"
         mensagem["To"] = destinatario
+
+        # Versão em texto puro (usada por clientes de e-mail que não
+        # renderizam HTML, ou por leitores de tela).
         mensagem.set_content(
             f"Olá, {nome or destinatario}!\n\n"
             f"Seu código de verificação do NewsManager é: {codigo}\n\n"
             f"Esse código expira em {EmailOTPManager.VALIDADE_MINUTOS} minutos. "
-            "Se você não tentou fazer login ou criar uma conta, pode ignorar "
-            "este e-mail."
+            "Se você não solicitou isso, pode ignorar este e-mail."
         )
+
+        html = EmailSender._montar_html(nome or destinatario, codigo, titulo, texto_intro)
+        mensagem.add_alternative(html, subtype="html")
+
+        # Se existir um logo de verdade em assets/logo.png, embute a imagem
+        # no e-mail referenciada pelo "cid:" usado no <img> do HTML acima.
+        if os.path.exists(LOGO_FILE):
+            parte_html = mensagem.get_payload()[-1]
+            with open(LOGO_FILE, "rb") as arquivo_logo:
+                dados_logo = arquivo_logo.read()
+            subtipo_imagem = "jpeg" if LOGO_FILE.lower().endswith((".jpg", ".jpeg")) else "png"
+            parte_html.add_related(
+                dados_logo, maintype="image", subtype=subtipo_imagem, cid=f"<{_LOGO_CID}>"
+            )
 
         try:
             porta = int(config["smtp_porta"])

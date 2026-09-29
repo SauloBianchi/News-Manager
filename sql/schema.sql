@@ -30,22 +30,35 @@ CREATE TABLE IF NOT EXISTS usuarios (
 
 CREATE TABLE IF NOT EXISTS categorias (
     id INT AUTO_INCREMENT PRIMARY KEY,
-    nome VARCHAR(80) NOT NULL UNIQUE
+    nome VARCHAR(80) NOT NULL UNIQUE,
+    descricao VARCHAR(255) NULL,                       -- "resumo editorial da seção"
+    cor VARCHAR(20) NOT NULL DEFAULT 'rubro',          -- rubro | azul | sepia | carvao
+    status VARCHAR(20) NOT NULL DEFAULT 'ativa'        -- ativa | em_revisao
 );
 
 CREATE TABLE IF NOT EXISTS autores (
     id INT AUTO_INCREMENT PRIMARY KEY,
     nome VARCHAR(120) NOT NULL,
-    email VARCHAR(150)
+    email VARCHAR(150),
+    bio TEXT NULL,
+    funcao VARCHAR(30) NOT NULL DEFAULT 'reporter',    -- reporter | colunista | editor_setorial | correspondente
+    cargo VARCHAR(120) NULL,                           -- ex.: Editora de Política • Brasília
+    registro VARCHAR(40) NULL,                         -- MTB / cédula profissional
+    status VARCHAR(30) NOT NULL DEFAULT 'ativo'        -- ativo | em_pauta_externa
 );
 
 CREATE TABLE IF NOT EXISTS noticias (
     id INT AUTO_INCREMENT PRIMARY KEY,
     titulo VARCHAR(200) NOT NULL,
+    subtitulo VARCHAR(300) NULL,                       -- linha fina / lead editorial
     conteudo TEXT,
     categoria_id INT NOT NULL,
     autor_id INT NOT NULL,
-    data_publicacao DATE NOT NULL,
+    data_publicacao DATETIME NOT NULL,                 -- data e hora de emissão
+    status VARCHAR(20) NOT NULL DEFAULT 'publicado',   -- rascunho | em_pauta | revisao | publicado
+    destaque TINYINT(1) NOT NULL DEFAULT 0,            -- manchete de capa
+    etiquetas VARCHAR(255) NULL,                       -- separadas por vírgula, sem o '#'
+    leituras INT NOT NULL DEFAULT 0,
     FOREIGN KEY (categoria_id) REFERENCES categorias(id),
     FOREIGN KEY (autor_id) REFERENCES autores(id)
 );
@@ -55,10 +68,14 @@ CREATE TABLE IF NOT EXISTS noticias (
 -- como as senhas agora usam hash bcrypt (gerado em Python), crie o primeiro
 -- usuário pela própria tela de "Criar conta" do aplicativo.
 
-INSERT INTO categorias (nome) VALUES ('Política'), ('Esportes'), ('Tecnologia'), ('Economia')
+INSERT INTO categorias (nome, descricao, cor) VALUES
+  ('Política', 'Cobertura de plenário, ministérios, políticas públicas e relações institucionais de governo.', 'rubro'),
+  ('Esportes', 'Campeonatos nacionais, olimpismo, automobilismo e análise tática esportiva.', 'carvao'),
+  ('Tecnologia', 'Avanços computacionais, inteligência artificial, espaço e pesquisas acadêmicas de vanguarda.', 'sepia'),
+  ('Economia', 'Indicadores macroeconômicos, mercados financeiros, balanços corporativos e tributação.', 'azul')
   ON DUPLICATE KEY UPDATE nome = nome;
 
-INSERT INTO autores (nome, email) VALUES ('Ernesto', 'ernesto@example.com'),
-                                         ('Gabriel S', 'gabriel@example.com'),
-                                         ('Saulo', 'saulo@example.com')
+INSERT INTO autores (nome, email, funcao) VALUES ('Ernesto', 'ernesto@example.com', 'reporter'),
+                                                 ('Gabriel S', 'gabriel@example.com', 'reporter'),
+                                                 ('Saulo', 'saulo@example.com', 'reporter')
   ON DUPLICATE KEY UPDATE nome = nome;

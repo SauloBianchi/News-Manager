@@ -6,16 +6,17 @@ layout editorial ("Broadsheet Editorial") do protótipo do Stitch.
 Janelas:
 - LoginWindow: autenticação com usuário/e-mail + senha, ou com o Google.
 - CadastroWindow: criação de conta, com opção de ativar 2FA na hora.
+- RecuperarSenhaWindow: fluxo de "esqueci minha senha" (código por e-mail).
 - VerificacaoDoisFatoresDialog: pedido do código de 6 dígitos (enviado por
   e-mail) no login, quando o usuário tem 2FA ativado.
 - ConfiguracaoDoisFatoresDialog: envia e confirma o código para ativar o 2FA.
-- MainWindow: janela principal (CRUD de notícias, gráfico e segurança).
+- MainWindow: janela principal (cabeçalho com navegação; telas de notícias,
+  categorias, autores, gráficos e segurança).
 """
 
 import threading
 import tkinter as tk
-from tkinter import ttk, messagebox
-from datetime import date
+from tkinter import messagebox
 
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
@@ -31,6 +32,9 @@ from .auth import (
     ConfiguracaoEmailAusente,
 )
 from . import theme as t
+from .telas_cadastros import CategoriasFrame, AutoresFrame, _cabecalho
+from .tela_noticias import NoticiasFrame
+from .shell import Cabecalho, AreaAbas, Rodape
 
 
 # =============================================================================
@@ -77,18 +81,27 @@ def _buscar_ou_criar_usuario_google(db, perfil):
 # =============================================================================
 # Auxiliares de envio do código de verificação por e-mail (2FA)
 # =============================================================================
-def _gerar_e_enviar_codigo_async(widget, usuario, callback):
+def _gerar_e_enviar_codigo_async(widget, usuario, callback, titulo=None, texto_intro=None):
     """Gera o código de 6 dígitos e o envia por e-mail numa thread separada
     (evita travar a janela enquanto o SMTP responde). O callback recebe
-    (codigo_hash, expira_em, erro) de volta na thread principal do Tkinter."""
+    (codigo_hash, expira_em, erro) de volta na thread principal do Tkinter.
+
+    `titulo`/`texto_intro`, quando informados, personalizam o texto do
+    e-mail (por padrão é o de verificação em duas etapas); usados, por
+    exemplo, no fluxo de "esqueci minha senha"."""
 
     def tarefa():
         codigo = EmailOTPManager.gerar_codigo()
         codigo_hash = EmailOTPManager.hash_codigo(codigo)
         expira_em = EmailOTPManager.calcular_expiracao()
+        kwargs = {}
+        if titulo is not None:
+            kwargs["titulo"] = titulo
+        if texto_intro is not None:
+            kwargs["texto_intro"] = texto_intro
         try:
             EmailSender.enviar_codigo_verificacao(
-                usuario["email"], usuario.get("nome", ""), codigo
+                usuario["email"], usuario.get("nome", ""), codigo, **kwargs
             )
             widget.after(0, lambda: callback(codigo_hash, expira_em, None))
         except Exception as erro:
@@ -159,6 +172,10 @@ class LoginWindow(tk.Tk):
         self.campo_senha = t.CampoEditorial(interno, "SENHA", mostrar="*")
         self.campo_senha.pack(fill="x", pady=8)
         self.campo_senha.entry.bind("<Return>", lambda e: self._entrar())
+
+        linha_esqueceu = tk.Frame(interno, bg=t.SURFACE)
+        linha_esqueceu.pack(fill="x")
+        t.link_texto(linha_esqueceu, "Esqueceu a senha?", self._abrir_recuperar_senha).pack(side="right")
 
         t.botao_primario(interno, "Entrar no sistema", self._entrar).pack(fill="x", pady=(18, 10))
 
@@ -259,6 +276,10 @@ class LoginWindow(tk.Tk):
     def _abrir_cadastro(self):
         self.withdraw()
         CadastroWindow(self, self.db, self.logger)
+
+    def _abrir_recuperar_senha(self):
+        self.withdraw()
+        RecuperarSenhaWindow(self, self.db, self.logger)
 
 
 # =============================================================================
@@ -425,6 +446,211 @@ class CadastroWindow(tk.Toplevel):
         except Exception as e:
             self.logger.error("Erro ao concluir cadastro com Google", e)
             messagebox.showerror("Erro", "Não foi possível concluir o cadastro com o Google.")
+
+
+# =============================================================================
+# Janela: Recuperar Senha ("esqueci minha senha")
+# =============================================================================
+class RecuperarSenhaWindow(tk.Toplevel):
+    """Fluxo de 'esqueci minha senha': confirma a identidade com um código
+    de 6 dígitos enviado por e-mail e permite definir uma senha nova.
+    Reaproveita a mesma infraestrutura de código do 2FA (EmailOTPManager /
+    EmailSender e as colunas codigo_verificacao / codigo_expira_em)."""
+
+    def __init__(self, login_window: LoginWindow, db: DatabaseManager, logger: Logger):
+        super().__init__(login_window)
+        self.login_window = login_window
+        self.db = db
+        self.logger = logger
+        self.usuario = None
+        self._codigo_hash = None
+        self._codigo_expira_em = None
+        self._enviando = False
+        t.Fontes.preparar(self)
+
+        self.title("NewsManager — Recuperar Senha")
+        self.configure(bg=t.BG)
+        self.geometry("480x640")
+        self.minsize(440, 600)
+        # Não usar transient(login_window): o login está com withdraw() e,
+        # no Tk, uma janela transient herda a visibilidade do mestre (fica oculta).
+        self.protocol("WM_DELETE_WINDOW", self._voltar_ao_login)
+
+        self._montar_layout()
+
+    def _montar_layout(self):
+        wrapper = tk.Frame(self, bg=t.BG)
+        wrapper.pack(expand=True, fill="both", padx=24, pady=28)
+
+        cartao = tk.Frame(wrapper, bg=t.SURFACE, highlightbackground=t.BORDER, highlightthickness=1)
+        cartao.pack(fill="both", expand=True)
+        t.double_rule(cartao, bg=t.SURFACE).pack(fill="x")
+
+        self.interno = tk.Frame(cartao, bg=t.SURFACE, padx=28, pady=22)
+        self.interno.pack(fill="both", expand=True)
+
+        tk.Label(self.interno, text="RECUPERAÇÃO DE ACESSO", fg=t.PRIMARY, bg=t.SURFACE,
+                 font=t.Fontes.corpo(9, "bold")).pack(anchor="w")
+        tk.Label(self.interno, text="Esqueceu sua senha?", fg=t.TEXT, bg=t.SURFACE,
+                 font=t.Fontes.display(20)).pack(anchor="w", pady=(2, 14))
+
+        # As duas etapas ficam em frames próprios; só um deles fica visível
+        # (pack/pack_forget) de cada vez.
+        self.etapa_identificacao = tk.Frame(self.interno, bg=t.SURFACE)
+        self.etapa_redefinicao = tk.Frame(self.interno, bg=t.SURFACE)
+        self._montar_etapa_identificacao(self.etapa_identificacao)
+        self._montar_etapa_redefinicao(self.etapa_redefinicao)
+        self.etapa_identificacao.pack(fill="both", expand=True)
+
+        rodape = tk.Frame(self.interno, bg=t.SURFACE)
+        rodape.pack(fill="x", pady=(18, 0))
+        t.link_texto(rodape, "Voltar para o login", self._voltar_ao_login).pack(side="left")
+
+    # ---------- Etapa 1: identificar a conta ----------
+    def _montar_etapa_identificacao(self, frame):
+        tk.Label(
+            frame,
+            text=("Informe seu usuário ou e-mail. Vamos enviar um código de\n"
+                  "verificação para você redefinir sua senha."),
+            fg=t.TEXT_MUTED, bg=t.SURFACE, font=t.Fontes.corpo(10), justify="left",
+        ).pack(anchor="w", pady=(0, 14))
+
+        self.campo_identificador = t.CampoEditorial(frame, "USUÁRIO OU E-MAIL")
+        self.campo_identificador.pack(fill="x", pady=6)
+        self.campo_identificador.entry.bind("<Return>", lambda e: self._solicitar_codigo())
+
+        self.botao_enviar = t.botao_primario(frame, "Enviar código", self._solicitar_codigo)
+        self.botao_enviar.pack(fill="x", pady=(14, 0))
+
+    def _solicitar_codigo(self):
+        identificador = self.campo_identificador.get()
+        if not identificador:
+            messagebox.showwarning("Atenção", "Informe seu usuário ou e-mail.")
+            return
+
+        if not self.db.connection and not self.db.conectar():
+            messagebox.showerror("Erro", "Não foi possível conectar ao banco de dados.")
+            return
+
+        usuario = self.db.buscar_usuario_por_identificador(identificador)
+        if not usuario:
+            messagebox.showerror("Não encontrado", "Não encontramos uma conta com esse usuário ou e-mail.")
+            return
+        if not usuario.get("senha_hash"):
+            messagebox.showinfo(
+                "Conta vinculada ao Google",
+                "Essa conta faz login apenas com o Google — não existe senha para "
+                "redefinir. Use o botão \"Entrar com o Google\".",
+            )
+            return
+
+        self.usuario = usuario
+        self.botao_enviar.configure(state="disabled", text="Enviando…")
+        _gerar_e_enviar_codigo_async(
+            self, self.usuario, self._apos_envio_codigo,
+            titulo="Redefinição de Senha",
+            texto_intro="Use o código abaixo para definir uma nova senha para sua conta.",
+        )
+
+    def _apos_envio_codigo(self, codigo_hash, expira_em, erro):
+        self.botao_enviar.configure(state="normal", text="Enviar código")
+
+        if erro is not None:
+            _tratar_erro_email(erro, self.logger)
+            return
+
+        self.db.salvar_codigo_verificacao(self.usuario["id"], codigo_hash, expira_em)
+        self._codigo_hash = codigo_hash
+        self._codigo_expira_em = expira_em
+
+        self.label_status_codigo.configure(
+            text=(f"Enviamos um código de 6 dígitos para {self.usuario['email']}. "
+                  f"Ele expira em {EmailOTPManager.VALIDADE_MINUTOS} minutos.")
+        )
+        self.etapa_identificacao.pack_forget()
+        self.etapa_redefinicao.pack(fill="both", expand=True)
+        self.campo_codigo.focus()
+
+    # ---------- Etapa 2: código + nova senha ----------
+    def _montar_etapa_redefinicao(self, frame):
+        self.label_status_codigo = tk.Label(
+            frame, text="", fg=t.TEXT_MUTED, bg=t.SURFACE, font=t.Fontes.corpo(10),
+            justify="left", wraplength=360,
+        )
+        self.label_status_codigo.pack(anchor="w", pady=(0, 12))
+
+        self.campo_codigo = t.CampoEditorial(frame, "CÓDIGO RECEBIDO POR E-MAIL")
+        self.campo_codigo.pack(fill="x", pady=6)
+
+        self.campo_nova_senha = t.CampoEditorial(frame, "NOVA SENHA", mostrar="*")
+        self.campo_nova_senha.pack(fill="x", pady=6)
+
+        self.campo_confirmar_senha = t.CampoEditorial(frame, "CONFIRMAR NOVA SENHA", mostrar="*")
+        self.campo_confirmar_senha.pack(fill="x", pady=6)
+        self.campo_confirmar_senha.entry.bind("<Return>", lambda e: self._redefinir_senha())
+
+        self.botao_redefinir = t.botao_primario(frame, "Redefinir senha", self._redefinir_senha)
+        self.botao_redefinir.pack(fill="x", pady=(14, 6))
+
+        self.link_reenviar = t.link_texto(frame, "Reenviar código", self._reenviar_codigo)
+        self.link_reenviar.pack(anchor="w")
+
+    def _reenviar_codigo(self):
+        if self._enviando or not self.usuario:
+            return
+        self._enviando = True
+        self.link_reenviar.configure(fg=t.TEXT_MUTED)
+        self.label_status_codigo.configure(text=f"Reenviando um código para {self.usuario['email']}…")
+        _gerar_e_enviar_codigo_async(
+            self, self.usuario, self._apos_reenvio_codigo,
+            titulo="Redefinição de Senha",
+            texto_intro="Use o código abaixo para definir uma nova senha para sua conta.",
+        )
+
+    def _apos_reenvio_codigo(self, codigo_hash, expira_em, erro):
+        self._enviando = False
+        self.link_reenviar.configure(fg=t.SECONDARY)
+
+        if erro is not None:
+            _tratar_erro_email(erro, self.logger)
+            return
+
+        self.db.salvar_codigo_verificacao(self.usuario["id"], codigo_hash, expira_em)
+        self._codigo_hash = codigo_hash
+        self._codigo_expira_em = expira_em
+        self.label_status_codigo.configure(
+            text=(f"Enviamos um novo código para {self.usuario['email']}. "
+                  f"Ele expira em {EmailOTPManager.VALIDADE_MINUTOS} minutos.")
+        )
+
+    def _redefinir_senha(self):
+        codigo = self.campo_codigo.get()
+        nova_senha = self.campo_nova_senha.get()
+        confirmar = self.campo_confirmar_senha.get()
+
+        if not EmailOTPManager.validar_codigo(codigo, self._codigo_hash, self._codigo_expira_em):
+            messagebox.showerror("Código inválido", "O código informado está incorreto ou expirou.")
+            return
+        if len(nova_senha) < 8:
+            messagebox.showwarning("Atenção", "A nova senha deve ter ao menos 8 caracteres.")
+            return
+        if nova_senha != confirmar:
+            messagebox.showwarning("Atenção", "As senhas não coincidem.")
+            return
+
+        try:
+            nova_senha_hash = PasswordHasher.gerar_hash(nova_senha)
+            self.db.redefinir_senha(self.usuario["id"], nova_senha_hash)
+            self.logger.info(f"Senha redefinida para: {self.usuario['usuario']}")
+            messagebox.showinfo("Senha redefinida", "Sua senha foi alterada. Faça login com a nova senha.")
+            self._voltar_ao_login()
+        except DependenciaAusente as e:
+            messagebox.showerror("Dependência ausente", str(e))
+
+    # ---------- Navegação ----------
+    def _voltar_ao_login(self):
+        self.destroy()
+        self.login_window.deiconify()
 
 
 # =============================================================================
@@ -649,145 +875,106 @@ class ConfiguracaoDoisFatoresDialog(tk.Toplevel):
 # Janela: Principal
 # =============================================================================
 class MainWindow(tk.Tk):
-    """Janela principal: cadastro de notícias, categorias, autores, gráfico
-    e uma aba simples de segurança da conta (2FA)."""
+    """Janela principal: cabeçalho/masthead com navegação (Notícias,
+    Categorias, Autores, Gráficos e Segurança) e a tela de cada seção."""
 
     def __init__(self, db: DatabaseManager, logger: Logger, usuario: dict = None):
         super().__init__()
         self.db = db
         self.logger = logger
         self.usuario = usuario or {}
+        t.Fontes.preparar(self)
 
         titulo_usuario = f" — {self.usuario.get('nome')}" if self.usuario.get("nome") else ""
         self.title(f"NewsManager - Sistema de Gerenciamento e Análise de Notícias{titulo_usuario}")
-        self.geometry("900x600")
+        self.configure(bg=t.BG)
+        self.geometry("1280x860")
+        self.minsize(1100, 700)
 
         self._montar_layout()
-        self._carregar_noticias()
+        self.mostrar_aba("noticias")
 
     # ---------- Layout geral ----------
     def _montar_layout(self):
-        abas = ttk.Notebook(self)
-        abas.pack(fill="both", expand=True)
+        self.cabecalho = Cabecalho(
+            self, self.usuario,
+            ao_navegar=self.mostrar_aba,
+            ao_nova_materia=self._nova_materia,
+            ao_sair=self._sair,
+            verificar_conexao=self._banco_conectado,
+        )
+        self.cabecalho.pack(fill="x")
+        Rodape(self).pack(side="bottom", fill="x")
+        self.area = AreaAbas(self)
+        self.area.pack(fill="both", expand=True)
 
-        self.aba_noticias = ttk.Frame(abas)
-        self.aba_grafico = ttk.Frame(abas)
-        self.aba_seguranca = ttk.Frame(abas)
+        # Telas do layout Stitch (app/tela_noticias.py e app/telas_cadastros.py)
+        self.aba_noticias = NoticiasFrame(
+            self.area, self.db, self.logger, ao_alterar=self._apos_alterar_cadastros)
+        self.aba_categorias = CategoriasFrame(
+            self.area, self.db, self.logger, ao_alterar=self._apos_alterar_cadastros)
+        self.aba_autores = AutoresFrame(
+            self.area, self.db, self.logger, ao_alterar=self._apos_alterar_cadastros)
+        self.aba_grafico = tk.Frame(self.area, bg=t.BG)
+        self.aba_seguranca = tk.Frame(self.area, bg=t.BG)
 
-        abas.add(self.aba_noticias, text="Notícias")
-        abas.add(self.aba_grafico, text="Gráficos")
-        abas.add(self.aba_seguranca, text="Segurança")
+        # Mesma ordem da navegação do protótipo
+        self.area.adicionar("noticias", self.aba_noticias)
+        self.area.adicionar("categorias", self.aba_categorias)
+        self.area.adicionar("autores", self.aba_autores)
+        self.area.adicionar("graficos", self.aba_grafico)
+        self.area.adicionar("seguranca", self.aba_seguranca)
 
-        self._montar_aba_noticias()
         self._montar_aba_grafico()
         self._montar_aba_seguranca()
 
-    # ---------- Aba de Notícias (CRUD) ----------
-    def _montar_aba_noticias(self):
-        frame_form = ttk.LabelFrame(self.aba_noticias, text="Nova / Editar Notícia")
-        frame_form.pack(fill="x", padx=10, pady=10)
+    # ---------- Navegação ----------
+    def mostrar_aba(self, chave):
+        """Troca de tela e recarrega os dados dela (as contagens de matérias
+        por categoria/autor podem ter mudado em outra aba)."""
+        self.area.mostrar(chave)
+        self.cabecalho.definir_ativa(chave)
+        if chave in ("noticias", "categorias", "autores"):
+            self.area.tela(chave).recarregar()
+        elif chave == "graficos":
+            self._desenhar_grafico()
 
-        tk.Label(frame_form, text="Título").grid(row=0, column=0, sticky="w")
-        self.entry_titulo = tk.Entry(frame_form, width=50)
-        self.entry_titulo.grid(row=0, column=1, padx=5, pady=3)
+    def _nova_materia(self):
+        self.mostrar_aba("noticias")
+        self.aba_noticias.nova_materia()
 
-        tk.Label(frame_form, text="Categoria ID").grid(row=1, column=0, sticky="w")
-        self.entry_categoria = tk.Entry(frame_form)
-        self.entry_categoria.grid(row=1, column=1, sticky="w", padx=5, pady=3)
+    def _banco_conectado(self):
+        conexao = getattr(self.db, "connection", None)
+        return bool(conexao and conexao.is_connected())
 
-        tk.Label(frame_form, text="Autor ID").grid(row=2, column=0, sticky="w")
-        self.entry_autor = tk.Entry(frame_form)
-        self.entry_autor.grid(row=2, column=1, sticky="w", padx=5, pady=3)
-
-        tk.Label(frame_form, text="Conteúdo").grid(row=3, column=0, sticky="nw")
-        self.text_conteudo = tk.Text(frame_form, width=50, height=4)
-        self.text_conteudo.grid(row=3, column=1, padx=5, pady=3)
-
-        botoes = ttk.Frame(frame_form)
-        botoes.grid(row=4, column=1, sticky="w", pady=5)
-        ttk.Button(botoes, text="Adicionar", command=self._adicionar_noticia).pack(side="left", padx=3)
-        ttk.Button(botoes, text="Atualizar", command=self._atualizar_noticia).pack(side="left", padx=3)
-        ttk.Button(botoes, text="Excluir", command=self._excluir_noticia).pack(side="left", padx=3)
-
-        colunas = ("id", "titulo", "categoria", "autor", "data_publicacao")
-        self.tree = ttk.Treeview(self.aba_noticias, columns=colunas, show="headings")
-        for col in colunas:
-            self.tree.heading(col, text=col.capitalize())
-        self.tree.pack(fill="both", expand=True, padx=10, pady=10)
-        self.tree.bind("<<TreeviewSelect>>", self._selecionar_noticia)
-
-    def _carregar_noticias(self):
-        for item in self.tree.get_children():
-            self.tree.delete(item)
+    def _apos_alterar_cadastros(self):
+        """Chamado quando uma notícia, categoria ou autor muda."""
         try:
-            for noticia in self.db.listar_noticias():
-                self.tree.insert("", "end", values=(
-                    noticia["id"], noticia["titulo"], noticia["categoria"],
-                    noticia["autor"], noticia["data_publicacao"],
-                ))
+            self._desenhar_grafico()
         except Exception as e:
-            self.logger.error("Erro ao carregar notícias", e)
+            self.logger.error("Erro ao atualizar o gráfico", e)
 
-    def _adicionar_noticia(self):
-        try:
-            self.db.criar_noticia(
-                self.entry_titulo.get(),
-                self.text_conteudo.get("1.0", "end").strip(),
-                int(self.entry_categoria.get()),
-                int(self.entry_autor.get()),
-                date.today(),
-            )
-            self._carregar_noticias()
-            self.logger.info("Notícia adicionada.")
-        except Exception as e:
-            self.logger.error("Erro ao adicionar notícia", e)
-            messagebox.showerror("Erro", "Não foi possível adicionar a notícia.")
-
-    def _selecionar_noticia(self, event):
-        selecionado = self.tree.focus()
-        if selecionado:
-            self._id_selecionado = self.tree.item(selecionado)["values"][0]
-
-    def _atualizar_noticia(self):
-        if not getattr(self, "_id_selecionado", None):
-            messagebox.showwarning("Atenção", "Selecione uma notícia na lista.")
+    def _sair(self):
+        """Encerra a sessão e volta para a tela de login."""
+        if not messagebox.askyesno("Sair", "Deseja encerrar a sessão e voltar ao login?"):
             return
-        try:
-            self.db.atualizar_noticia(
-                self._id_selecionado,
-                self.entry_titulo.get(),
-                self.text_conteudo.get("1.0", "end").strip(),
-                int(self.entry_categoria.get()),
-                int(self.entry_autor.get()),
-                date.today(),
-            )
-            self._carregar_noticias()
-            self.logger.info(f"Notícia {self._id_selecionado} atualizada.")
-        except Exception as e:
-            self.logger.error("Erro ao atualizar notícia", e)
-            messagebox.showerror("Erro", "Não foi possível atualizar a notícia.")
+        self.logger.info(f"Logout: {self.usuario.get('usuario')}")
+        self.destroy()
+        LoginWindow(self.db, self.logger).mainloop()
 
-    def _excluir_noticia(self):
-        if not getattr(self, "_id_selecionado", None):
-            messagebox.showwarning("Atenção", "Selecione uma notícia na lista.")
-            return
-        try:
-            self.db.excluir_noticia(self._id_selecionado)
-            self._carregar_noticias()
-            self.logger.info(f"Notícia {self._id_selecionado} excluída.")
-        except Exception as e:
-            self.logger.error("Erro ao excluir notícia", e)
-            messagebox.showerror("Erro", "Não foi possível excluir a notícia.")
-
-    # ---------- Aba de Gráficos ----------
     def _montar_aba_grafico(self):
-        ttk.Button(
-            self.aba_grafico, text="Atualizar gráfico", command=self._desenhar_grafico
-        ).pack(pady=10)
+        _cabecalho(
+            self.aba_grafico, "Mesa de Análise", "Gráficos & Análise",
+            "Distribuição das matérias por editoria no acervo do jornal.",
+        )
+        barra = tk.Frame(self.aba_grafico, bg=t.BG)
+        barra.pack(fill="x", padx=28, pady=(14, 0))
+        t.botao_secundario(barra, "ATUALIZAR GRÁFICO", self._desenhar_grafico).pack(side="right")
 
-        self.figura = Figure(figsize=(6, 4))
+        self.figura = Figure(figsize=(6, 4), facecolor=t.BG)
         self.canvas = FigureCanvasTkAgg(self.figura, master=self.aba_grafico)
-        self.canvas.get_tk_widget().pack(fill="both", expand=True)
+        self.canvas.get_tk_widget().configure(bg=t.BG, highlightthickness=0)
+        self.canvas.get_tk_widget().pack(fill="both", expand=True, padx=28, pady=14)
         self._desenhar_grafico()
 
     def _desenhar_grafico(self):
@@ -795,13 +982,17 @@ class MainWindow(tk.Tk):
             dados = self.db.contar_noticias_por_categoria()
             self.figura.clear()
             ax = self.figura.add_subplot(111)
+            ax.set_facecolor(t.SURFACE)
 
             categorias = [d["categoria"] for d in dados]
             totais = [d["total"] for d in dados]
 
-            ax.bar(categorias, totais, color="#2b6cb0")
-            ax.set_title("Notícias por Categoria")
-            ax.set_ylabel("Quantidade")
+            ax.bar(categorias, totais, color=t.PRIMARY)
+            ax.set_title("Notícias por Categoria", color=t.TEXT)
+            ax.set_ylabel("Quantidade", color=t.TEXT_MUTED)
+            ax.tick_params(colors=t.TEXT_MUTED)
+            for lado in ("top", "right"):
+                ax.spines[lado].set_visible(False)
             self.figura.autofmt_xdate(rotation=30)
             self.canvas.draw()
         except Exception as e:
@@ -809,19 +1000,26 @@ class MainWindow(tk.Tk):
 
     # ---------- Aba de Segurança (2FA) ----------
     def _montar_aba_seguranca(self):
-        frame = ttk.Frame(self.aba_seguranca, padding=20)
-        frame.pack(fill="both", expand=True)
+        _cabecalho(
+            self.aba_seguranca, "Credenciais & Acesso", "Segurança da Conta",
+            "Verificação em duas etapas por e-mail para proteger o acesso à redação.",
+        )
+        cartao = tk.Frame(self.aba_seguranca, bg=t.SURFACE, highlightthickness=1,
+                          highlightbackground=t.BORDER)
+        cartao.pack(fill="x", padx=28, pady=(18, 0))
+        interno = tk.Frame(cartao, bg=t.SURFACE, padx=20, pady=18)
+        interno.pack(fill="x")
 
         nome = self.usuario.get("nome", "—")
         email = self.usuario.get("email", "—")
-        ttk.Label(
-            frame, text=f"Usuário logado: {nome} ({email})", font=("Arial", 11, "bold")
-        ).pack(anchor="w", pady=(0, 14))
+        tk.Label(interno, text=f"Usuário logado: {nome} ({email})", fg=t.TEXT, bg=t.SURFACE,
+                 font=t.Fontes.corpo(11, "bold")).pack(anchor="w", pady=(0, 12))
 
-        self.label_status_2fa = ttk.Label(frame, text="")
-        self.label_status_2fa.pack(anchor="w", pady=(0, 8))
+        self.label_status_2fa = tk.Label(interno, text="", fg=t.TEXT_MUTED, bg=t.SURFACE,
+                                         font=t.Fontes.corpo(10))
+        self.label_status_2fa.pack(anchor="w", pady=(0, 12))
 
-        self.botao_2fa = ttk.Button(frame, text="", command=self._alternar_2fa)
+        self.botao_2fa = t.botao_primario(interno, "Ativar 2FA", self._alternar_2fa)
         self.botao_2fa.pack(anchor="w")
 
         self._atualizar_status_2fa()
@@ -846,4 +1044,4 @@ class MainWindow(tk.Tk):
         self.label_status_2fa.configure(
             text=f"Verificação em duas etapas (por e-mail): {'ATIVADA' if ativo else 'DESATIVADA'}"
         )
-        self.botao_2fa.configure(text=("Desativar 2FA" if ativo else "Ativar 2FA"))
+        self.botao_2fa.configure(text=("DESATIVAR 2FA" if ativo else "ATIVAR 2FA"))

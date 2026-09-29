@@ -13,10 +13,20 @@ com Tkinter e banco de dados MySQL.
   usuário/e-mail + senha com hash **bcrypt**.
 - **Verificação em duas etapas (2FA) por código enviado por e-mail** —
   código de 6 dígitos, válido por 10 minutos, enviado via SMTP.
+- **"Esqueci minha senha"** — redefine a senha confirmando a identidade
+  por um código enviado ao e-mail cadastrado.
 - **Login com o Google** (OAuth 2.0), tanto na tela de login quanto na de
   cadastro — cria a conta automaticamente no primeiro acesso.
-- Janela Principal com CRUD completo de notícias (criar, listar, editar,
-  excluir), cadastro de categorias e autores.
+- **E-mails com layout próprio** (HTML, no estilo editorial do app), com
+  suporte a logo customizado.
+- Janela Principal com cabeçalho/masthead e navegação no estilo do Stitch
+  (Notícias, Categorias, Autores, Gráficos, Segurança) e botão Sair.
+- **CRUD de notícias** (criar, listar com busca/filtros/paginação, editar,
+  excluir, ler): editor com linha fina, seção, jornalista, data/hora, estado
+  (rascunho, em pauta, revisão, publicado), manchete de capa e etiquetas.
+- **Telas de Categorias e Autores** no layout do Stitch: cartões de resumo,
+  busca, filtros por função, formulários de cadastro/edição, paginação,
+  relatório de categorias em CSV e bloqueio de exclusão de quem tem matérias.
 - Gráfico de notícias por categoria (matplotlib).
 - Aba de Segurança para ativar/desativar o 2FA depois do cadastro.
 - Registro de eventos e erros em `logs/error.log`.
@@ -32,6 +42,11 @@ News-Manager-main/
 │   ├── __init__.py
 │   ├── gui.py                       # Janelas Tkinter (login, cadastro, 2FA, principal)
 │   ├── database.py                  # Conexão MySQL e operações CRUD
+│   ├── cadastros.py                 # Regras de negócio do CRUD de categorias e autores (services)
+│   ├── telas_cadastros.py           # Telas Tkinter de Categorias e Autores (layout Stitch)
+│   ├── noticias.py                  # Regras de negócio do CRUD de notícias (NoticiaService)
+│   ├── tela_noticias.py             # Tela de Notícias: editor, feed em cartões e leitura
+│   ├── shell.py                     # Cabeçalho/masthead, navegação, área de abas e rodapé
 │   ├── auth.py                      # Hash de senha, 2FA por e-mail e login com Google
 │   ├── theme.py                     # Paleta de cores e tipografia (estilo editorial)
 │   └── logger.py                    # Registro de eventos/erros
@@ -39,6 +54,8 @@ News-Manager-main/
 │   ├── client_secret.json.example   # Modelo das credenciais OAuth do Google
 │   └── email_config.json.example    # Modelo das credenciais SMTP (2FA por e-mail)
 │       (os arquivos de verdade, sem ".example", também vão aqui — nunca commitados)
+├── assets/
+│   └── logo.png                     # Opcional — se existir, é usado nos e-mails (ver seção 8)
 ├── sql/
 │   ├── schema.sql                   # Script de criação do banco e tabelas (do zero)
 │   ├── migration_auth.sql           # Migração da versão bem antiga (texto puro) para a atual
@@ -163,9 +180,44 @@ configuração de servidor/deploy.
 - Se `config/email_config.json` não existir ou estiver incompleto, o
   sistema avisa exatamente o que falta configurar, em vez de travar.
 
-### 7. Rodar a aplicação
+### 7. Como funciona o "Esqueci minha senha"
+- Na tela de **Login**, o link "Esqueceu a senha?" abre uma janela em
+  duas etapas: primeiro pede o usuário/e-mail da conta; se encontrada,
+  envia um código de 6 dígitos para o e-mail cadastrado.
+- Na segunda etapa, a pessoa informa o código recebido, a nova senha e a
+  confirmação. O código tem a mesma validade de 10 minutos do 2FA (tem
+  link "Reenviar código" também).
+- Contas criadas só pelo **Google** (sem senha local) mostram um aviso
+  explicando que o login é feito só pelo botão do Google.
+- Por simplicidade, se o usuário/e-mail informado não existir, o sistema
+  avisa diretamente ("Não encontramos uma conta..."). Em um sistema de
+  produção, o ideal seria mostrar sempre a mesma mensagem genérica (algo
+  como "se essa conta existir, enviamos um e-mail"), para não revelar se
+  um e-mail está ou não cadastrado — vale considerar isso na documentação
+  do trabalho, se for pedido uma análise de segurança.
+
+### 8. Personalizando o layout e o logo dos e-mails
+Todos os e-mails de código (2FA e "esqueci minha senha") são gerados em
+HTML, no mesmo estilo editorial do resto do app (cores, tipografia,
+filetes), com uma versão em texto puro como reserva para clientes que não
+exibem HTML.
+
+- O **layout** fica em `app/auth.py`, no método `EmailSender._montar_html`
+  — dá pra mexer nas cores, textos e na estrutura da tabela HTML ali.
+- Para usar um **logo de verdade** em vez do nome "NewsManager" estilizado
+  em texto, basta colocar um arquivo de imagem em `assets/logo.png` (ou
+  `.jpg`, ajustando `LOGO_FILE` em `app/auth.py`) na raiz do projeto. Se o
+  arquivo existir, ele é detectado e embutido automaticamente no e-mail;
+  se não existir, o e-mail continua funcionando normalmente com o logo em
+  texto.
+- Os textos de título/introdução do e-mail podem ser personalizados por
+  chamada (é o que já é feito para diferenciar o e-mail de 2FA do e-mail
+  de redefinição de senha) — veja os parâmetros `titulo` e `texto_intro`
+  de `EmailSender.enviar_codigo_verificacao`.
+
+### 9. Rodar a aplicação
 Sempre a partir da raiz do projeto (é daqui que os caminhos relativos de
-`config/` e `logs/` são resolvidos):
+`config/`, `assets/` e `logs/` são resolvidos):
 ```bash
 python main.py
 ```

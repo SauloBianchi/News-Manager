@@ -1,0 +1,7 @@
+{
+  "smtp_host": "smtp.gmail.com",
+  "smtp_porta": 587,
+  "smtp_usuario": "seu.email@gmail.com",
+  "smtp_senha": "sua-senha-de-app-de-16-letras",
+  "remetente_nome": "NewsManager"
+}

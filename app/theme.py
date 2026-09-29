@@ -99,11 +99,13 @@ class CampoEditorial(tk.Frame):
             topo, text=rotulo, bg=SURFACE, fg=TEXT,
             font=Fontes.corpo(11, "bold"),
         ).pack(side="left")
+        self.dica_label = None  # fica acessível para textos dinâmicos (ex.: "12 / 120")
         if dica:
-            tk.Label(
+            self.dica_label = tk.Label(
                 topo, text=dica, bg=SURFACE, fg=TEXT_MUTED,
                 font=Fontes.corpo(9),
-            ).pack(side="right")
+            )
+            self.dica_label.pack(side="right")
 
         container = tk.Frame(self, bg=SURFACE)
         container.pack(fill="x", pady=(4, 0))
