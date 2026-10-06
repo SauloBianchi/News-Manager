@@ -44,7 +44,8 @@ CREATE TABLE IF NOT EXISTS autores (
     funcao VARCHAR(30) NOT NULL DEFAULT 'reporter',    -- reporter | colunista | editor_setorial | correspondente
     cargo VARCHAR(120) NULL,                           -- ex.: Editora de Política • Brasília
     registro VARCHAR(40) NULL,                         -- MTB / cédula profissional
-    status VARCHAR(30) NOT NULL DEFAULT 'ativo'        -- ativo | em_pauta_externa
+    status VARCHAR(30) NOT NULL DEFAULT 'ativo',       -- ativo | em_pauta_externa
+    foto VARCHAR(255) NULL                             -- caminho dentro de midia/
 );
 
 CREATE TABLE IF NOT EXISTS noticias (
@@ -59,6 +60,9 @@ CREATE TABLE IF NOT EXISTS noticias (
     destaque TINYINT(1) NOT NULL DEFAULT 0,            -- manchete de capa
     etiquetas VARCHAR(255) NULL,                       -- separadas por vírgula, sem o '#'
     leituras INT NOT NULL DEFAULT 0,
+    imagem VARCHAR(255) NULL,                          -- fotografia de capa (caminho dentro de midia/)
+    imagem_legenda VARCHAR(255) NULL,
+    imagem_credito VARCHAR(120) NULL,
     FOREIGN KEY (categoria_id) REFERENCES categorias(id),
     FOREIGN KEY (autor_id) REFERENCES autores(id)
 );

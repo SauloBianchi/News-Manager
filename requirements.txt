@@ -1,5 +1,6 @@
 mysql-connector-python
 matplotlib
+pillow                    # imagens (capa das matérias e foto dos autores)
 
 # Autenticação
 bcrypt                    # hash de senha

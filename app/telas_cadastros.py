@@ -24,6 +24,8 @@ from datetime import date, datetime, timedelta
 from tkinter import filedialog, messagebox, ttk
 
 from . import theme as t
+from .midia import TIPOS_ARQUIVO_DIALOGO, ErroMidia
+from .midia import midia as midia_global
 from .cadastros import (
     CORES_CATEGORIA,
     FUNCOES_AUTOR,
@@ -216,6 +218,113 @@ class CampoSelecao(tk.Frame):
             self.combo.current(self._chaves.index(chave))
 
 
+class CampoImagem(tk.Frame):
+    """Seletor de imagem: miniatura, botão 'Escolher imagem' e link 'Remover'.
+
+    Ciclo de vida dos arquivos (para não sobrar imagem perdida na pasta):
+    - escolher() copia a imagem para a pasta de mídia na hora, mas ela só fica
+      "valendo" quando o registro é salvo (o chamador usa confirmar_salvo());
+    - se o usuário trocar de imagem, limpar o formulário ou abrir outro
+      registro antes de salvar, a cópia provisória é apagada;
+    - a imagem ANTIGA de um registro editado é apagada pelo serviço (app/
+      cadastros.py e app/noticias.py) quando o novo caminho é gravado.
+    """
+
+    def __init__(self, parent, rotulo, pasta, largura=180, altura=100, gerenciador=None):
+        super().__init__(parent, bg=t.SURFACE)
+        t.Fontes.preparar(parent)
+        self.pasta = pasta
+        self.largura, self.altura = largura, altura
+        self.midia = gerenciador or midia_global
+        self._original = None   # caminho gravado no banco para o registro em edição
+        self._atual = None      # caminho que está no formulário agora
+
+        tk.Label(self, text=rotulo, bg=t.SURFACE, fg=t.TEXT,
+                 font=t.Fontes.corpo(11, "bold")).pack(anchor="w")
+        self.moldura = tk.Frame(self, width=largura, height=altura, bg=PAINEL,
+                                highlightthickness=1, highlightbackground=t.BORDER)
+        self.moldura.pack(anchor="w", pady=(4, 0))
+        self.moldura.pack_propagate(False)
+        self.preview = tk.Label(self.moldura, text="SEM IMAGEM", bg=PAINEL, fg=t.TEXT_MUTED,
+                                font=t.Fontes.corpo(8, "bold"), bd=0, cursor="hand2")
+        self.preview.pack(fill="both", expand=True)
+        self.preview.bind("<Button-1>", lambda e: self.escolher())
+
+        botoes = tk.Frame(self, bg=t.SURFACE)
+        botoes.pack(anchor="w", pady=(6, 0))
+        self.botao_escolher = t.botao_secundario(botoes, "ESCOLHER IMAGEM", self.escolher)
+        self.botao_escolher.pack(side="left")
+        self.link_remover = _link(botoes, "REMOVER", self.remover, t.ERROR)
+        self._atualizar_preview()
+
+    # ---------- estado ----------
+    @property
+    def caminho(self):
+        """Caminho relativo da imagem no formulário (ou None)."""
+        return self._atual
+
+    def definir(self, caminho):
+        """Carrega a imagem já gravada de um registro (sem mexer em arquivos)."""
+        self._descartar_provisoria()
+        self._original = self._atual = caminho or None
+        self._atualizar_preview()
+
+    def definir_provisoria(self, caminho):
+        """Como definir(), mas a imagem ainda NÃO está salva em nenhum registro
+        (ex.: veio de outro formulário): se o usuário desistir, o arquivo é apagado."""
+        self._descartar_provisoria()
+        self._original = None
+        self._atual = caminho or None
+        self._atualizar_preview()
+
+    def limpar(self):
+        self.definir(None)
+
+    def confirmar_salvo(self):
+        """Chame depois de salvar com sucesso: a imagem do formulário passa a ser a oficial."""
+        self._original = self._atual
+
+    def _descartar_provisoria(self):
+        if self._atual and self._atual != self._original:
+            self.midia.remover(self._atual)
+
+    # ---------- ações ----------
+    def escolher(self):
+        origem = filedialog.askopenfilename(
+            title="Escolher imagem", filetypes=TIPOS_ARQUIVO_DIALOGO)
+        if not origem:
+            return
+        try:
+            novo = self.midia.importar(origem, self.pasta)
+        except ErroMidia as erro:
+            messagebox.showwarning("Imagem", str(erro))
+            return
+        self._descartar_provisoria()
+        self._atual = novo
+        self._atualizar_preview()
+
+    def remover(self):
+        self._descartar_provisoria()
+        self._atual = None
+        self._atualizar_preview()
+
+    def _atualizar_preview(self):
+        foto = self.midia.carregar_tk(self._atual, self.largura - 2, self.altura - 2) if self._atual else None
+        if foto is not None:
+            self.preview.configure(image=foto, text="")
+            self.preview.image = foto   # o Tk descarta a imagem se ninguém guardar a referência
+        elif self._atual:
+            self.preview.configure(image="", text="IMAGEM SELECIONADA")
+            self.preview.image = None
+        else:
+            self.preview.configure(image="", text="SEM IMAGEM")
+            self.preview.image = None
+        if self._atual:
+            self.link_remover.pack(side="left", padx=(10, 0))
+        else:
+            self.link_remover.pack_forget()
+
+
 class CampoTextoLongo(tk.Frame):
     """Rótulo + caixa de texto de várias linhas (biografia)."""
 
@@ -293,6 +402,7 @@ class _TelaBase(tk.Frame):
         t.Fontes.preparar(self)
         self.db = db
         self.logger = logger
+        self.midia = midia_global
         self.ao_alterar = ao_alterar
         self._id_edicao = None
         self._busca_agendada = None
@@ -663,7 +773,7 @@ class AutoresFrame(_TelaBase):
 
     def __init__(self, parent, db, logger, ao_alterar=None):
         super().__init__(parent, db, logger, ao_alterar)
-        self.servico = AutorService(db, logger)
+        self.servico = AutorService(db, logger, midia_global)
         self._funcao = ""          # "" = Todos
         self._pagina_atual = 1
         self._autores = []
@@ -730,8 +840,11 @@ class AutoresFrame(_TelaBase):
         for indice, campo in enumerate(campos):
             campo.grid(row=indice // 3, column=indice % 3, sticky="ew", padx=8, pady=6)
 
+        self.campo_foto = CampoImagem(self.painel_form, "FOTO DO JORNALISTA", "autores",
+                                      largura=110, altura=110)
+        self.campo_foto.pack(anchor="w", padx=18, pady=(4, 0))
         self.campo_bio = CampoTextoLongo(self.painel_form, "BIOGRAFIA CURTA & LINHA EDITORIAL", 3)
-        self.campo_bio.pack(fill="x", padx=18, pady=(4, 0))
+        self.campo_bio.pack(fill="x", padx=18, pady=(8, 0))
 
         botoes = tk.Frame(self.painel_form, bg=t.SURFACE)
         botoes.pack(fill="x", padx=18, pady=(12, 14))
@@ -809,8 +922,20 @@ class AutoresFrame(_TelaBase):
         topo = tk.Frame(corpo, bg=t.SURFACE)
         topo.pack(fill="x")
         inicial = (autor["nome"][:1] or "?").upper()
-        tk.Label(topo, text=inicial, fg="#FFFFFF", bg=cor, width=3, height=1,
-                 font=t.Fontes.display(20)).pack(side="left")
+        foto = self.midia.carregar_tk(autor.get("foto"), 56, 56)
+        if foto is not None:
+            # foto com a inicial num selo no canto, como no protótipo
+            moldura = tk.Frame(topo, width=56, height=56, bg=cor)
+            moldura.pack(side="left")
+            moldura.pack_propagate(False)
+            imagem = tk.Label(moldura, image=foto, bd=0)
+            imagem.image = foto
+            imagem.place(x=0, y=0, relwidth=1, relheight=1)
+            tk.Label(moldura, text=inicial, fg="#FFFFFF", bg=cor, width=2,
+                     font=t.Fontes.corpo(8, "bold")).place(relx=1.0, rely=1.0, anchor="se")
+        else:
+            tk.Label(topo, text=inicial, fg="#FFFFFF", bg=cor, width=3, height=1,
+                     font=t.Fontes.display(20)).pack(side="left")
         acoes = tk.Frame(topo, bg=t.SURFACE)
         acoes.pack(side="right", anchor="n")
         _link(acoes, "EDITAR", lambda a=autor: self._abrir_form(a)).pack(side="left")
@@ -901,11 +1026,13 @@ class AutoresFrame(_TelaBase):
         self.campo_registro.set(autor["registro"] or "" if autor else "")
         self.campo_status.set(autor["status"] if autor else "ativo")
         self.campo_bio.set(autor["bio"] or "" if autor else "")
+        self.campo_foto.definir(autor["foto"] if autor else None)
         self.painel_form.pack(fill="x", pady=(18, 0))
         self.campo_nome.focus()
 
     def _fechar_form(self):
         self._id_edicao = None
+        self.campo_foto.limpar()   # apaga a cópia provisória de uma foto não salva
         self.painel_form.pack_forget()
 
     def _salvar(self):
@@ -913,13 +1040,14 @@ class AutoresFrame(_TelaBase):
             nome=self.campo_nome.get(), email=self.campo_email.get(),
             funcao=self.campo_funcao.get(), cargo=self.campo_cargo.get(),
             registro=self.campo_registro.get(), status=self.campo_status.get(),
-            bio=self.campo_bio.get(),
+            bio=self.campo_bio.get(), foto=self.campo_foto.caminho,
         )
         if self._id_edicao is None:
             resultado = self.servico.criar(**dados)
         else:
             resultado = self.servico.atualizar(self._id_edicao, **dados)
         if self._mostrar(resultado, "Autores"):
+            self.campo_foto.confirmar_salvo()
             self._fechar_form()
             self.recarregar()
             self._avisar_alteracao()

@@ -24,6 +24,23 @@ com Tkinter e banco de dados MySQL.
 - **CRUD de notícias** (criar, listar com busca/filtros/paginação, editar,
   excluir, ler): editor com linha fina, seção, jornalista, data/hora, estado
   (rascunho, em pauta, revisão, publicado), manchete de capa e etiquetas.
+- **Editor redacional completo** (tela própria, aberto por "+ Nova matéria"):
+  título nobre, linha fina, barra de formatação (negrito, itálico, sublinhado,
+  intertítulos, citação, link, listas, imagem e filete), contadores, ficha de
+  rotativa (colunas, legibilidade Flesch, tempo de leitura, embargo), registro
+  editorial, etiquetas, auto-salvamento local e botões Salvar rascunho /
+  Publicar. O texto usa marcadores simples (`**negrito**`, `*itálico*`,
+  `## intertítulo`, `> citação`).
+- **Página de leitura da matéria** (tela inteira): sumário "Nesta edição",
+  texto formatado, capa com legenda, bloco do autor, palavras-chave,
+  leituras suplementares da mesma editoria e exportação em HTML (para
+  imprimir/salvar em PDF pelo navegador).
+- **Dados de teste**: `python seed.py` cria editorias, autores e matérias em todos os
+  estados (com imagens) e roda uma verificação automática; o roteiro do que
+  conferir na tela está em `ROTEIRO_DE_TESTE.md`.
+- **Imagens**: fotografia de capa (com legenda e crédito) nas matérias e foto
+  dos jornalistas. Os arquivos são copiados para a pasta `midia/` (criada
+  automaticamente, fora do Git); precisa do Pillow (`pip install pillow`).
 - **Telas de Categorias e Autores** no layout do Stitch: cartões de resumo,
   busca, filtros por função, formulários de cadastro/edição, paginação,
   relatório de categorias em CSV e bloqueio de exclusão de quem tem matérias.
@@ -46,6 +63,10 @@ News-Manager-main/
 │   ├── telas_cadastros.py           # Telas Tkinter de Categorias e Autores (layout Stitch)
 │   ├── noticias.py                  # Regras de negócio do CRUD de notícias (NoticiaService)
 │   ├── tela_noticias.py             # Tela de Notícias: editor, feed em cartões e leitura
+│   ├── texto_rico.py                # Formatação do texto das matérias, estatísticas e exportação HTML
+│   ├── tela_editor.py               # Tela Nova Matéria: editor redacional completo
+│   ├── tela_leitura.py              # Tela de leitura da matéria (página inteira)
+│   ├── midia.py                     # Importação, redimensionamento e exibição das imagens
 │   ├── shell.py                     # Cabeçalho/masthead, navegação, área de abas e rodapé
 │   ├── auth.py                      # Hash de senha, 2FA por e-mail e login com Google
 │   ├── theme.py                     # Paleta de cores e tipografia (estilo editorial)

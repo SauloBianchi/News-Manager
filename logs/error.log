@@ -68,3 +68,64 @@
 2026-09-29 17:24:30,297 - INFO - Login bem-sucedido: saulo.bianchi@aluno.farroupilha.ifrs.edu.br
 2026-09-29 17:37:54,693 - INFO - Conexão com o banco de dados encerrada.
 2026-09-29 17:37:54,693 - INFO - Aplicação NewsManager encerrada.
+2026-10-06 16:49:23,518 - INFO - Aplicação NewsManager iniciada.
+2026-10-06 16:49:36,560 - INFO - Please visit this URL to authorize this application: https://accounts.google.com/o/oauth2/auth?response_type=code&client_id=1084176106227-bvh33i7atei31gb3guthrlqlqo8qdn90.apps.googleusercontent.com&redirect_uri=http%3A%2F%2Flocalhost%3A60871%2F&scope=openid+https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fuserinfo.email+https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fuserinfo.profile&state=IIzqdjTFZ54MTqHn0zJPfBVt6hu0hf&code_challenge=dEHDvGgERXFwOGbiv4ZJf6VKY1O_zX0mwkSeinufBu0&code_challenge_method=S256&prompt=select_account&access_type=offline
+2026-10-06 16:50:13,284 - INFO - "GET /?state=IIzqdjTFZ54MTqHn0zJPfBVt6hu0hf&iss=https://accounts.google.com&code=4/0AXlqoi4MBOXlQRYcSx1X1S6THt_qAFAV_tXkwdN9UBNaCQf7TMEudLjlWZV1nqduc7bJzA&scope=email+profile+https://www.googleapis.com/auth/userinfo.profile+https://www.googleapis.com/auth/userinfo.email+openid&authuser=0&hd=aluno.farroupilha.ifrs.edu.br&prompt=consent HTTP/1.1" 200 65
+2026-10-06 16:50:18,436 - ERROR - Falha ao conectar ao banco de dados | Exceção: 2003 (HY000): Can't connect to MySQL server on 'localhost:3306' (10061)
+2026-10-06 16:53:39,240 - INFO - Aplicação NewsManager encerrada.
+2026-10-06 17:03:05,616 - INFO - Aplicação NewsManager iniciada.
+2026-10-06 17:03:11,089 - INFO - Please visit this URL to authorize this application: https://accounts.google.com/o/oauth2/auth?response_type=code&client_id=1084176106227-bvh33i7atei31gb3guthrlqlqo8qdn90.apps.googleusercontent.com&redirect_uri=http%3A%2F%2Flocalhost%3A61359%2F&scope=openid+https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fuserinfo.email+https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fuserinfo.profile&state=bOh0OiykBMRZG0cPxcthJKANB5hGMq&code_challenge=kuhStk8NxABNkjkACT0bvgie5hw8gRfIntdGJ0JNC74&code_challenge_method=S256&prompt=select_account&access_type=offline
+2026-10-06 17:03:20,112 - INFO - "GET /?state=bOh0OiykBMRZG0cPxcthJKANB5hGMq&iss=https://accounts.google.com&code=4/0AXlqoi7mvWw6KyUakFZLzHbIdt9nzeP2WEBzjI6pc8Fx3uRFpMXDbqIimWZU5Tkz5trCsQ&scope=email+profile+https://www.googleapis.com/auth/userinfo.profile+https://www.googleapis.com/auth/userinfo.email+openid&authuser=0&hd=aluno.farroupilha.ifrs.edu.br&prompt=consent HTTP/1.1" 200 65
+2026-10-06 17:03:21,097 - INFO - Conexão com o banco de dados estabelecida.
+2026-10-06 17:03:21,237 - INFO - Cadastro/login via Google: saulo.bianchi@aluno.farroupilha.ifrs.edu.br
+2026-10-06 17:04:03,563 - INFO - Conexão com o banco de dados estabelecida.
+2026-10-06 17:04:03,678 - INFO - Categoria criada: Política (id 5)
+2026-10-06 17:04:03,681 - INFO - Categoria criada: Economia & Negócios (id 6)
+2026-10-06 17:04:03,684 - INFO - Categoria criada: Tecnologia & Ciência (id 7)
+2026-10-06 17:04:03,686 - INFO - Categoria criada: Cultura & Artes (id 8)
+2026-10-06 17:04:03,687 - INFO - Categoria criada: Mundo & Diplomacia (id 9)
+2026-10-06 17:04:03,690 - INFO - Categoria criada: Opinião & Artigos (id 10)
+2026-10-06 17:04:03,691 - INFO - Categoria criada: Esportes & Lazer (id 11)
+2026-10-06 17:04:03,693 - INFO - Categoria criada: Meio Ambiente & Clima (id 12)
+2026-10-06 17:04:03,696 - INFO - Categoria criada: Saúde & Bem-estar (id 13)
+2026-10-06 17:04:03,823 - INFO - Autor criado: Teresa Castelo (id 4)
+2026-10-06 17:04:03,845 - INFO - Autor criado: Henrique Alcântara (id 5)
+2026-10-06 17:04:03,868 - INFO - Autor criado: Beatriz Lins (id 6)
+2026-10-06 17:04:03,887 - INFO - Autor criado: Gabriel Esteves (id 7)
+2026-10-06 17:04:03,908 - INFO - Autor criado: Sofia Ramalho (id 8)
+2026-10-06 17:04:03,910 - INFO - Autor criado: Roberto Fontes (id 9)
+2026-10-06 17:04:03,912 - INFO - Autor criado: Mariana Alencar (id 10)
+2026-10-06 17:04:03,938 - INFO - Autor criado: Carlos Eduardo Silva (id 11)
+2026-10-06 17:04:03,940 - INFO - Autor criado: Redação NewsManager (id 12)
+2026-10-06 17:04:03,942 - INFO - Autor criado: Joana Freitas (id 13)
+2026-10-06 17:04:04,015 - INFO - Notícia criada: Reforma Tributária e os Novos Desafios Estruturais para o Varejo Nacional (id 1, publicado)
+2026-10-06 17:04:04,058 - INFO - Notícia criada: Avanços em Inteligência Artificial Redefinem a Produção de Notícias (id 2, publicado)
+2026-10-06 17:04:04,095 - INFO - Notícia criada: Bienal Internacional do Livro Celebra Centenário de Autores Modernistas (id 3, publicado)
+2026-10-06 17:04:04,135 - INFO - Notícia criada: Cúpula Global do Clima Estabelece Metas Vinculantes para 2030 (id 4, publicado)
+2026-10-06 17:04:04,139 - INFO - Notícia criada: Novo Polo Científico e Tecnológico é Inaugurado no Parque Tecnológico (id 5, publicado)
+2026-10-06 17:04:04,142 - INFO - Notícia criada: Editorial: Os Desafios do Jornalismo Investigativo na Era dos Algoritmos (id 6, publicado)
+2026-10-06 17:04:04,179 - INFO - Notícia criada: Câmara aprova texto-base da reforma administrativa (id 7, publicado)
+2026-10-06 17:04:04,184 - INFO - Notícia criada: Selic é mantida e mercado ajusta projeções para o fim do ano (id 8, publicado)
+2026-10-06 17:04:04,191 - INFO - Notícia criada: Seleção feminina estreia com vitória nas eliminatórias (id 9, publicado)
+2026-10-06 17:04:04,198 - INFO - Notícia criada: Crônica: o último bonde da Rua das Flores (id 10, publicado)
+2026-10-06 17:04:04,203 - INFO - Notícia criada: Nova rota de investigação aponta fraudes em contratos públicos (id 11, revisao)
+2026-10-06 17:04:04,205 - INFO - Notícia criada: Mercado de carbono: o que muda para as exportadoras brasileiras (id 12, revisao)
+2026-10-06 17:04:04,207 - INFO - Notícia criada: Pauta: cobertura especial das eleições legislativas europeias (id 13, em_pauta)
+2026-10-06 17:04:04,211 - INFO - Notícia criada: Perfil do novo presidente do banco central (id 14, rascunho)
+2026-10-06 17:04:04,215 - INFO - Notícia criada: Estudo comparativo internacional sobre os efeitos da simplificação tributária nas pequenas empresas entre 2010 e 2024 (id 15, rascunho)
+2026-10-06 17:04:04,217 - INFO - Notícia criada: Embargada: balanço anual das exportações será divulgado na próxima semana (id 16, publicado)
+2026-10-06 17:04:04,220 - INFO - Notícia criada: Ação & Reação: 100% de aprovação, “aspas curvas” e _sublinhados_ no debate (id 17, publicado)
+2026-10-06 17:04:04,287 - INFO - Notícia criada: Dossiê: vinte anos de transformação digital nas redações brasileiras (id 18, publicado)
+2026-10-06 17:04:04,474 - INFO - Categoria criada: Temporária do verificador (id 14)
+2026-10-06 17:04:04,476 - INFO - Categoria 14 atualizada: Temporária do verificador
+2026-10-06 17:04:04,479 - INFO - Categoria 14 excluída: Temporária do verificador
+2026-10-06 17:04:04,505 - INFO - Autor criado: Autor temporário do verificador (id 14)
+2026-10-06 17:04:04,507 - INFO - Autor 14 excluído: Autor temporário do verificador
+2026-10-06 17:04:04,611 - INFO - Conexão com o banco de dados encerrada.
+2026-10-06 17:04:14,725 - INFO - Aplicação NewsManager iniciada.
+2026-10-06 17:04:17,862 - INFO - Please visit this URL to authorize this application: https://accounts.google.com/o/oauth2/auth?response_type=code&client_id=1084176106227-bvh33i7atei31gb3guthrlqlqo8qdn90.apps.googleusercontent.com&redirect_uri=http%3A%2F%2Flocalhost%3A61399%2F&scope=openid+https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fuserinfo.email+https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fuserinfo.profile&state=gjNpUa9RW86vjsb9nTTgf9VjEMTpKq&code_challenge=5Vk8QVl77ztvZdZhh2GRQ0EFqbpU9ArUqrphLb7Vo5c&code_challenge_method=S256&prompt=select_account&access_type=offline
+2026-10-06 17:04:25,862 - INFO - "GET /?state=gjNpUa9RW86vjsb9nTTgf9VjEMTpKq&iss=https://accounts.google.com&code=4/0AXlqoi5R8DlT8DL9Xar_iUo0KEWYRux_6CzVfanDP3qGYis_jb9qNsGRwWpFWse6jAAreg&scope=email+profile+https://www.googleapis.com/auth/userinfo.profile+https://www.googleapis.com/auth/userinfo.email+openid&authuser=0&hd=aluno.farroupilha.ifrs.edu.br&prompt=consent HTTP/1.1" 200 65
+2026-10-06 17:04:26,739 - INFO - Conexão com o banco de dados estabelecida.
+2026-10-06 17:04:26,840 - INFO - Login via Google: saulo.bianchi@aluno.farroupilha.ifrs.edu.br
+2026-10-06 17:04:26,843 - INFO - Login bem-sucedido: saulo.bianchi@aluno.farroupilha.ifrs.edu.br
+2026-10-06 17:06:17,060 - INFO - Notícia 16 excluída: Embargada: balanço anual das exportações será divulgado na próxima semana

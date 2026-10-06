@@ -70,9 +70,37 @@ def _limpar(texto) -> str:
 class _ServicoBase:
     """Trecho comum aos serviços: banco, logger e tratamento de ErroBanco."""
 
-    def __init__(self, db: DatabaseManager, logger: Logger):
+    def __init__(self, db: DatabaseManager, logger: Logger, midia=None):
         self.db = db
         self.logger = logger
+        # GerenciadorMidia (app/midia.py): se vier, o serviço confere se a
+        # imagem existe e apaga do disco os arquivos que deixam de ser usados.
+        self.midia = midia
+
+    def _checar_imagem(self, caminho):
+        """Devolve mensagem de erro se o caminho da imagem for inválido, senão None."""
+        if not caminho:
+            return None
+        if len(caminho) > 255:
+            return "Caminho da imagem muito longo."
+        if self.midia is not None and not self.midia.existe(caminho):
+            return "Arquivo de imagem não encontrado. Escolha a imagem novamente."
+        return None
+
+    def _descartar_imagem(self, caminho):
+        """Apaga o arquivo da pasta de mídia, a menos que outro registro ainda o use."""
+        if not caminho or self.midia is None:
+            return
+        try:
+            if self.db.imagem_em_uso(caminho):
+                return
+        except ErroBanco:
+            return   # na dúvida, não apaga
+        self.midia.remover(caminho)
+
+    def descartar_imagem_orfa(self, caminho):
+        """Uso pelas telas: remove uma imagem provisória que não foi para nenhum registro."""
+        self._descartar_imagem(caminho)
 
     def _falha_banco(self, contexto: str, erro: ErroBanco) -> Resultado:
         self.logger.error(contexto, erro.original or erro)
@@ -218,6 +246,7 @@ class AutorService(_ServicoBase):
             "registro": _limpar(dados.get("registro")) or None,
             "status": dados.get("status") or "ativo",
             "bio": (dados.get("bio") or "").strip() or None,
+            "foto": dados.get("foto") or None,
         }
         if not d["nome"]:
             return d, "Informe o nome completo do jornalista."
@@ -238,6 +267,9 @@ class AutorService(_ServicoBase):
             return d, f"O registro profissional pode ter no máximo {self.REGISTRO_MAX} caracteres."
         if d["bio"] and len(d["bio"]) > self.BIO_MAX:
             return d, f"A biografia pode ter no máximo {self.BIO_MAX} caracteres."
+        erro_foto = self._checar_imagem(d["foto"])
+        if erro_foto:
+            return d, erro_foto
         return d, None
 
     def listar(self, termo: str = "", funcao: str = "") -> Resultado:
@@ -277,14 +309,14 @@ class AutorService(_ServicoBase):
             return self._falha_banco("Erro ao listar matérias do autor", e)
 
     def criar(self, nome: str, email: str = "", funcao: str = "reporter", cargo: str = "",
-              registro: str = "", status: str = "ativo", bio: str = "") -> Resultado:
+              registro: str = "", status: str = "ativo", bio: str = "", foto: str = None) -> Resultado:
         try:
             d, erro = self._validar(dict(nome=nome, email=email, funcao=funcao, cargo=cargo,
-                                         registro=registro, status=status, bio=bio))
+                                         registro=registro, status=status, bio=bio, foto=foto))
             if erro:
                 return Resultado(False, erro)
             novo_id = self.db.criar_autor(d["nome"], d["email"], d["bio"], d["funcao"],
-                                          d["cargo"], d["registro"], d["status"])
+                                          d["cargo"], d["registro"], d["status"], d["foto"])
         except ErroBanco as e:
             return self._falha_banco("Erro ao criar autor", e)
         self.logger.info(f"Autor criado: {d['nome']} (id {novo_id})")
@@ -292,19 +324,22 @@ class AutorService(_ServicoBase):
 
     def atualizar(self, autor_id: int, nome: str, email: str = "", funcao: str = "reporter",
                   cargo: str = "", registro: str = "", status: str = "ativo",
-                  bio: str = "") -> Resultado:
+                  bio: str = "", foto: str = None) -> Resultado:
         try:
-            if not self.db.buscar_autor_por_id(autor_id):
+            atual = self.db.buscar_autor_por_id(autor_id)
+            if not atual:
                 return Resultado(False, "Autor não encontrado.")
             d, erro = self._validar(dict(nome=nome, email=email, funcao=funcao, cargo=cargo,
-                                         registro=registro, status=status, bio=bio),
+                                         registro=registro, status=status, bio=bio, foto=foto),
                                     ignorar_id=autor_id)
             if erro:
                 return Resultado(False, erro)
             self.db.atualizar_autor(autor_id, d["nome"], d["email"], d["bio"], d["funcao"],
-                                    d["cargo"], d["registro"], d["status"])
+                                    d["cargo"], d["registro"], d["status"], d["foto"])
         except ErroBanco as e:
             return self._falha_banco("Erro ao atualizar autor", e)
+        if atual.get("foto") != d["foto"]:
+            self._descartar_imagem(atual.get("foto"))   # a foto antiga deixou de ser usada
         self.logger.info(f"Autor {autor_id} atualizado: {d['nome']}")
         return Resultado(True, f"Credencial de \"{d['nome']}\" atualizada.", autor_id)
 
@@ -324,5 +359,6 @@ class AutorService(_ServicoBase):
             self.db.excluir_autor(autor_id)
         except ErroBanco as e:
             return self._falha_banco("Erro ao excluir autor", e)
+        self._descartar_imagem(autor.get("foto"))
         self.logger.info(f"Autor {autor_id} excluído: {autor['nome']}")
         return Resultado(True, f"Jornalista \"{autor['nome']}\" excluído.")

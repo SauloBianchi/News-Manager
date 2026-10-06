@@ -13,7 +13,8 @@ leitura_da_mat_ria_newsmanager):
 - "Edição Corrente & Feed de Matérias": cartões em grade 3x2 com busca,
   filtros (seção, estado), ordenação e paginação; cada cartão tem Editar,
   Ler e Excluir.
-- LeituraDialog: a matéria em modo de leitura (conta uma leitura).
+- Ler abre a página de leitura (tela_leitura.py); "Abrir no editor completo"
+  leva para o editor redacional (tela_editor.py).
 
 Toda a regra de negócio fica em NoticiaService (app/noticias.py).
 """
@@ -24,6 +25,7 @@ from tkinter import messagebox, ttk
 
 from . import theme as t
 from .cadastros import AutorService, CategoriaService
+from .midia import midia as midia_global
 from .noticias import (
     FORMATO_DATA_TELA,
     ORDENS_NOTICIA,
@@ -35,6 +37,7 @@ from .noticias import (
     tempo_leitura_min,
 )
 from .shell import MESES as MESES_LONGOS
+from .texto_rico import texto_simples
 from .telas_cadastros import (
     COR_MATIZ,
     FUNDO_MATIZ,
@@ -42,6 +45,7 @@ from .telas_cadastros import (
     PAINEL,
     PAINEL_ALTO,
     PAINEL_BAIXO,
+    CampoImagem,
     CampoSelecao,
     CampoTextoLongo,
     _cabecalho,
@@ -54,6 +58,7 @@ from .telas_cadastros import (
     desenhar_paginacao,
 )
 
+ALTURA_CAPA = 140             # altura da fotografia nos cartões do feed
 TINTA_INVERSA = "#31302B"     # fundo do cartão de manchete (inverse-surface)
 TEXTO_INVERSO = "#F4F0E8"     # texto sobre fundo escuro
 
@@ -83,9 +88,11 @@ class NoticiasFrame(_TelaBase):
     POR_PAGINA = 6
     COLUNAS_GRADE = 3
 
-    def __init__(self, parent, db, logger, ao_alterar=None):
+    def __init__(self, parent, db, logger, ao_alterar=None, ao_ler=None, ao_editar_completo=None):
         super().__init__(parent, db, logger, ao_alterar)
-        self.servico = NoticiaService(db, logger)
+        self.ao_ler = ao_ler                          # ao_ler(noticia_id): abre a página de leitura
+        self.ao_editar_completo = ao_editar_completo  # (noticia_id, dados_iniciais): editor completo
+        self.servico = NoticiaService(db, logger, midia_global)
         self._pagina_atual = 1
         self._filtro_categoria = None
         self._filtro_status = ""
@@ -153,8 +160,20 @@ class NoticiasFrame(_TelaBase):
         for indice, campo in enumerate(campos):
             campo.grid(row=indice // 3, column=indice % 3, sticky="ew", padx=8, pady=6)
 
+        bloco_foto = tk.Frame(cartao, bg=t.SURFACE)
+        bloco_foto.pack(fill="x", padx=18, pady=(8, 0))
+        self.campo_imagem = CampoImagem(bloco_foto, "FOTOGRAFIA DE CAPA", "noticias",
+                                        largura=220, altura=124)
+        self.campo_imagem.pack(side="left", anchor="n")
+        textos_foto = tk.Frame(bloco_foto, bg=t.SURFACE)
+        textos_foto.pack(side="left", fill="x", expand=True, padx=(16, 0), anchor="n")
+        self.campo_legenda = t.CampoEditorial(textos_foto, "LEGENDA DA FOTOGRAFIA", dica="OPCIONAL")
+        self.campo_legenda.pack(fill="x")
+        self.campo_credito = t.CampoEditorial(textos_foto, "CRÉDITO", dica="EX.: ARQUIVO EPA / IMAGENS OFICIAIS")
+        self.campo_credito.pack(fill="x", pady=(6, 0))
+
         self.campo_corpo = CampoTextoLongo(cartao, "GALÉ DE REDAÇÃO [CORPO DA MATÉRIA]", altura=9)
-        self.campo_corpo.pack(fill="x", padx=18, pady=(6, 0))
+        self.campo_corpo.pack(fill="x", padx=18, pady=(10, 0))
         self.contador_corpo = tk.Label(cartao, text="", fg=t.TEXT_MUTED, bg=t.SURFACE,
                                        font=t.Fontes.corpo(8, "bold"), anchor="w")
         self.contador_corpo.pack(fill="x", padx=18, pady=(4, 0))
@@ -171,6 +190,8 @@ class NoticiasFrame(_TelaBase):
         self.botao_excluir.configure(fg=t.ERROR)
         self.botao_excluir.pack(side="left", padx=(8, 0))
         _link(botoes, "LIMPAR CAMPOS", self._limpar_form, t.TEXT).pack(side="right")
+        _link(botoes, "ABRIR NO EDITOR COMPLETO →", self._abrir_editor_completo, t.PRIMARY).pack(
+            side="right", padx=(0, 18))
 
         self.rotulo_feedback = tk.Label(cartao, text="", fg=t.SUCCESS, bg=t.SURFACE,
                                         font=t.Fontes.corpo(9, "bold"), anchor="w")
@@ -363,6 +384,13 @@ class NoticiasFrame(_TelaBase):
             f"MOSTRANDO {len(itens)} DE {dados['total']} PAUTAS REGISTRADAS",
             dados["pagina"], dados["paginas"], self._ir_para_pagina)
 
+    def _largura_cartao(self) -> int:
+        """Largura aproximada de um cartão do feed (a capa ocupa toda a largura)."""
+        janela = self.winfo_toplevel().winfo_width()
+        if not isinstance(janela, int) or janela < 400:
+            janela = 1280
+        return max(300, (janela - 2 * MARGEM) // self.COLUNAS_GRADE - 28)
+
     def _cartao_noticia(self, pai, n):
         destaque = bool(n["destaque"])
         fundo = TINTA_INVERSA if destaque else t.SURFACE
@@ -372,17 +400,33 @@ class NoticiasFrame(_TelaBase):
 
         cartao = tk.Frame(pai, bg=fundo, highlightthickness=1, highlightbackground=t.BORDER)
 
-        faixa = tk.Frame(cartao, bg=COR_MATIZ[matiz], padx=12, pady=8)
-        faixa.pack(fill="x")
-        tk.Label(faixa, text=n["categoria"].upper(), fg="#FFFFFF", bg=COR_MATIZ[matiz],
-                 font=t.Fontes.corpo(8, "bold")).pack(side="left")
         hora = hora_da_data(n["data_publicacao"])
         if n["status"] == "publicado":
             direita = f"FECHADO ÀS {hora}" if hora else "PUBLICADO"
         else:
             direita = STATUS_NOTICIA.get(n["status"], "").upper()
-        tk.Label(faixa, text=direita, fg="#FFFFFF", bg=COR_MATIZ[matiz],
-                 font=t.Fontes.corpo(7, "bold")).pack(side="right")
+
+        largura_capa = self._largura_cartao()
+        capa = self.midia.carregar_tk(n.get("imagem"), largura_capa, ALTURA_CAPA)
+        if capa is not None:
+            # fotografia de capa com a seção e o fechamento sobrepostos, como no protótipo
+            topo = tk.Frame(cartao, width=largura_capa, height=ALTURA_CAPA, bg=fundo)
+            topo.pack(fill="x")
+            topo.pack_propagate(False)
+            foto = tk.Label(topo, image=capa, bd=0)
+            foto.image = capa
+            foto.place(x=0, y=0, relwidth=1, relheight=1)
+            tk.Label(topo, text=n["categoria"].upper(), fg="#FFFFFF", bg=COR_MATIZ[matiz],
+                     padx=8, pady=2, font=t.Fontes.corpo(8, "bold")).place(x=10, y=10)
+            tk.Label(topo, text=direita, fg=t.TEXT, bg="#FFFFFF", padx=6, pady=2,
+                     font=t.Fontes.corpo(7, "bold")).place(relx=1.0, rely=1.0, x=-10, y=-10, anchor="se")
+        else:
+            faixa = tk.Frame(cartao, bg=COR_MATIZ[matiz], padx=12, pady=8)
+            faixa.pack(fill="x")
+            tk.Label(faixa, text=n["categoria"].upper(), fg="#FFFFFF", bg=COR_MATIZ[matiz],
+                     font=t.Fontes.corpo(8, "bold")).pack(side="left")
+            tk.Label(faixa, text=direita, fg="#FFFFFF", bg=COR_MATIZ[matiz],
+                     font=t.Fontes.corpo(7, "bold")).pack(side="right")
 
         corpo = tk.Frame(cartao, bg=fundo, padx=14, pady=12)
         corpo.pack(fill="both", expand=True)
@@ -391,7 +435,7 @@ class NoticiasFrame(_TelaBase):
                  justify="left", wraplength=280).pack(anchor="w")
         tk.Label(corpo, text=n["titulo"], fg=texto, bg=fundo, font=t.Fontes.display(14),
                  anchor="w", justify="left", wraplength=280).pack(anchor="w", pady=(6, 4))
-        resumo = _resumir(n["subtitulo"] or n["resumo"], 140) or "Sem texto ainda."
+        resumo = _resumir(n["subtitulo"] or texto_simples(n["resumo"]), 140) or "Sem texto ainda."
         tk.Label(corpo, text=resumo, fg=texto, bg=fundo, font=t.Fontes.corpo(9), anchor="w",
                  justify="left", wraplength=280).pack(anchor="w", pady=(0, 10))
 
@@ -400,8 +444,14 @@ class NoticiasFrame(_TelaBase):
         rodape = tk.Frame(corpo, bg=fundo)
         rodape.pack(fill="x", side="bottom")
 
-        tk.Label(linha_autor, text=(n["autor"][:1] or "?").upper(), fg="#FFFFFF",
-                 bg=COR_MATIZ[matiz], width=2, font=t.Fontes.corpo(8, "bold")).pack(side="left")
+        avatar = self.midia.carregar_tk(n.get("autor_foto"), 24, 24)
+        if avatar is not None:
+            rotulo_avatar = tk.Label(linha_autor, image=avatar, bd=0)
+            rotulo_avatar.image = avatar
+            rotulo_avatar.pack(side="left")
+        else:
+            tk.Label(linha_autor, text=(n["autor"][:1] or "?").upper(), fg="#FFFFFF",
+                     bg=COR_MATIZ[matiz], width=2, font=t.Fontes.corpo(8, "bold")).pack(side="left")
         tk.Label(linha_autor, text=n["autor"], fg=texto, bg=fundo,
                  font=t.Fontes.corpo(9)).pack(side="left", padx=(6, 0))
         selo = "DESTAQUE" if destaque else STATUS_NOTICIA.get(n["status"], "").upper()
@@ -441,6 +491,9 @@ class NoticiasFrame(_TelaBase):
         self.campo_data.set(datetime.now().strftime(FORMATO_DATA_TELA))
         self.campo_etiquetas.set("")
         self.campo_corpo.set("")
+        self.campo_imagem.limpar()   # apaga a cópia provisória de uma imagem não salva
+        self.campo_legenda.set("")
+        self.campo_credito.set("")
         self.campo_status.set("rascunho")
         self.var_destaque.set(False)
         self.rotulo_feedback.configure(text="")
@@ -469,6 +522,9 @@ class NoticiasFrame(_TelaBase):
         self.campo_etiquetas.set(", ".join("#" + e for e in lista_etiquetas(n["etiquetas"])))
         self.var_destaque.set(bool(n["destaque"]))
         self.campo_corpo.set(n["conteudo"] or "")
+        self.campo_imagem.definir(n["imagem"])
+        self.campo_legenda.set(n["imagem_legenda"] or "")
+        self.campo_credito.set(n["imagem_credito"] or "")
         self.rotulo_feedback.configure(text="")
         self.chip_estado.configure(text=f"EDITANDO • ID: #NW-{int(n['id']):04d}")
         self.botao_atualizar.configure(state="normal")
@@ -487,6 +543,9 @@ class NoticiasFrame(_TelaBase):
             destaque=self.var_destaque.get(),
             etiquetas=self.campo_etiquetas.get(),
             data=self.campo_data.get(),
+            imagem=self.campo_imagem.caminho,
+            imagem_legenda=self.campo_legenda.get(),
+            imagem_credito=self.campo_credito.get(),
         )
 
     def _concluir(self, resultado):
@@ -494,6 +553,7 @@ class NoticiasFrame(_TelaBase):
         if not self._mostrar(resultado, "Notícias"):
             return False
         mensagem = resultado.mensagem
+        self.campo_imagem.confirmar_salvo()   # a imagem do formulário passa a ser a oficial
         self._limpar_form()
         self.rotulo_feedback.configure(text=mensagem)
         self.recarregar()
@@ -535,81 +595,42 @@ class NoticiasFrame(_TelaBase):
     # Leitura
     # =====================================================================
     def _ler(self, noticia):
-        if noticia["status"] == "publicado":
-            self.servico.registrar_leitura(noticia["id"])
-        resultado = self.servico.obter(noticia["id"])
-        if not self._mostrar(resultado, "Notícias"):
+        """Abre a página de leitura (ela registra a leitura se a matéria estiver publicada)."""
+        if self.ao_ler:
+            self.ao_ler(noticia["id"])
+
+    def _abrir_editor_completo(self):
+        """Leva o que está no editor rápido para o editor redacional completo."""
+        if not self.ao_editar_completo:
             return
+        if self._id_edicao is not None:
+            self.ao_editar_completo(self._id_edicao, None)
+            return
+        dados = dict(
+            titulo=self.campo_titulo.get(), subtitulo=self.campo_subtitulo.get(),
+            conteudo=self.campo_corpo.get(), categoria_id=self.campo_categoria.get(),
+            autor_id=self.campo_autor.get(), data=self.campo_data.get(),
+            status=self.campo_status.get(), destaque=bool(self.var_destaque.get()),
+            etiquetas=self.campo_etiquetas.get(), imagem=self.campo_imagem.caminho,
+            imagem_legenda=self.campo_legenda.get(), imagem_credito=self.campo_credito.get(),
+            imagem_provisoria=True,
+        )
+        self.campo_imagem.confirmar_salvo()   # a imagem segue com o editor completo
+        self._limpar_form()
+        self.ao_editar_completo(None, dados)
+
+    # ---------- atalhos usados por outras telas ----------
+    def buscar(self, termo):
+        """Mostra o feed filtrado por um texto (ex.: nome de autor ou etiqueta)."""
+        self.var_busca.set(termo or "")
+        self._pagina_atual = 1
         self.recarregar()
-        LeituraDialog(self, resultado.dados, ao_editar=self._editar)
 
-
-class LeituraDialog(tk.Toplevel):
-    """A matéria em modo de leitura (tela 'Leitura da Matéria' do protótipo)."""
-
-    def __init__(self, parent, n, ao_editar=None):
-        super().__init__(parent)
-        t.Fontes.preparar(self)
-        self.n = n
-        self.ao_editar = ao_editar
-        self.title(n["titulo"])
-        self.configure(bg=t.SURFACE)
-        self.geometry("820x700")
-        self.minsize(640, 520)
-        self.transient(parent.winfo_toplevel())
-        self._montar()
-
-    def _montar(self):
-        n = self.n
-        matiz = n["categoria_cor"] if n["categoria_cor"] in COR_MATIZ else "rubro"
-        conteudo = n["conteudo"] or ""
-
-        topo = tk.Frame(self, bg=t.SURFACE)
-        topo.pack(fill="x", padx=32, pady=(20, 0))
-        _etiqueta(topo, n["categoria"], COR_MATIZ[matiz], FUNDO_MATIZ[matiz], borda=False).pack(side="left")
-        tk.Label(topo, text=f"{tempo_leitura_min(conteudo)} MIN DE LEITURA", fg=t.TEXT_MUTED,
-                 bg=t.SURFACE, font=t.Fontes.corpo(8, "bold")).pack(side="right")
-
-        tk.Label(self, text=n["titulo"], fg=t.TEXT, bg=t.SURFACE, font=t.Fontes.display(24),
-                 wraplength=740, justify="center").pack(padx=32, pady=(14, 6))
-        if n["subtitulo"]:
-            tk.Label(self, text=n["subtitulo"], fg=t.TEXT_MUTED, bg=t.SURFACE,
-                     font=t.Fontes.display(13, "normal", True), wraplength=720,
-                     justify="center").pack(padx=32, pady=(0, 8))
-        tk.Frame(self, bg=t.TEXT, height=2).pack(fill="x", padx=32, pady=(6, 0))
-
-        autoria = tk.Frame(self, bg=PAINEL_BAIXO)
-        autoria.pack(fill="x", padx=32)
-        cargo = f" • {n['autor_cargo']}" if n.get("autor_cargo") else ""
-        tk.Label(autoria, text=f"Por {n['autor']}{cargo}", fg=t.TEXT, bg=PAINEL_BAIXO,
-                 font=t.Fontes.corpo(10, "bold"), pady=8).pack(side="left", padx=10)
-        data = interpretar_data(n["data_publicacao"])
-        quando = data.strftime("%d/%m/%Y às %H:%M") if data else ""
-        tk.Label(autoria, text=f"{quando}  •  {int(n['leituras'])} LEITURAS".strip(), fg=t.TEXT_MUTED,
-                 bg=PAINEL_BAIXO, font=t.Fontes.corpo(8, "bold")).pack(side="right", padx=10)
-
-        rodape = tk.Frame(self, bg=t.SURFACE)
-        rodape.pack(side="bottom", fill="x", padx=32, pady=(8, 16))
-        etiquetas = lista_etiquetas(n["etiquetas"])
-        if etiquetas:
-            tk.Label(rodape, text="PALAVRAS-CHAVE:  " + "   ".join("#" + e for e in etiquetas),
-                     fg=t.TEXT_MUTED, bg=t.SURFACE, font=t.Fontes.corpo(8, "bold")).pack(side="left")
-        t.botao_secundario(rodape, "FECHAR", self.destroy).pack(side="right")
-        if self.ao_editar:
-            t.botao_primario(rodape, "Editar matéria", self._editar).pack(side="right", padx=(0, 8))
-
-        area = tk.Frame(self, bg=t.SURFACE)
-        area.pack(fill="both", expand=True, padx=32, pady=(10, 0))
-        barra = ttk.Scrollbar(area, orient="vertical")
-        texto = tk.Text(area, wrap="word", relief="flat", bg=t.SURFACE, fg=t.TEXT,
-                        font=t.Fontes.display(13, "normal"), padx=4, pady=6, spacing2=4,
-                        spacing3=8, yscrollcommand=barra.set, bd=0, highlightthickness=0)
-        barra.configure(command=texto.yview)
-        barra.pack(side="right", fill="y")
-        texto.pack(side="left", fill="both", expand=True)
-        texto.insert("1.0", conteudo or "Esta matéria ainda não tem texto.")
-        texto.configure(state="disabled")
-
-    def _editar(self):
-        self.destroy()
-        self.ao_editar(self.n["id"])
+    def filtrar_categoria(self, categoria_id):
+        """Mostra o feed só com as matérias de uma editoria."""
+        self._recarregar_opcoes()
+        self._filtro_categoria = categoria_id if categoria_id in self._chaves_filtro_categoria else None
+        self.combo_categoria.current(self._chaves_filtro_categoria.index(self._filtro_categoria))
+        self.var_busca.set("")
+        self._pagina_atual = 1
+        self.recarregar()

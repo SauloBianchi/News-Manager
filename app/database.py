@@ -122,7 +122,8 @@ class DatabaseManager:
         """Atualiza bancos criados com a versão antiga do schema.sql: adiciona
         as colunas usadas pelas telas de Categorias e Autores (descricao, cor,
         status, bio, funcao, cargo, registro) e de Notícias (subtitulo, status,
-        destaque, etiquetas, leituras) se ainda não existirem. Roda a cada
+        destaque, etiquetas, leituras, imagem, imagem_legenda, imagem_credito) e a
+        foto dos autores se ainda não existirem. Roda a cada
         conexão, mas só altera a tabela na primeira vez."""
         novas_colunas = [
             ("categorias", "descricao", "VARCHAR(255) NULL"),
@@ -138,6 +139,10 @@ class DatabaseManager:
             ("noticias", "destaque", "TINYINT(1) NOT NULL DEFAULT 0"),
             ("noticias", "etiquetas", "VARCHAR(255) NULL"),
             ("noticias", "leituras", "INT NOT NULL DEFAULT 0"),
+            ("noticias", "imagem", "VARCHAR(255) NULL"),
+            ("noticias", "imagem_legenda", "VARCHAR(255) NULL"),
+            ("noticias", "imagem_credito", "VARCHAR(120) NULL"),
+            ("autores", "foto", "VARCHAR(255) NULL"),
         ]
         for tabela, coluna, definicao in novas_colunas:
             if not self._coluna_existe(tabela, coluna):
@@ -304,8 +309,9 @@ class DatabaseManager:
             params += [int(limite), int(deslocamento)]
         query = f"""SELECT n.id, n.titulo, n.subtitulo, SUBSTR(n.conteudo, 1, 400) AS resumo,
                            n.categoria_id, c.nome AS categoria, c.cor AS categoria_cor,
-                           n.autor_id, a.nome AS autor, n.status, n.destaque, n.etiquetas,
-                           n.leituras, n.data_publicacao
+                           n.autor_id, a.nome AS autor, a.foto AS autor_foto, n.status, n.destaque,
+                           n.etiquetas, n.leituras, n.data_publicacao,
+                           n.imagem, n.imagem_legenda, n.imagem_credito
                     FROM noticias n
                     JOIN categorias c ON c.id = n.categoria_id
                     JOIN autores a ON a.id = n.autor_id
@@ -332,8 +338,9 @@ class DatabaseManager:
         linhas = self._rodar(
             """SELECT n.id, n.titulo, n.subtitulo, n.conteudo, n.categoria_id,
                       c.nome AS categoria, c.cor AS categoria_cor, n.autor_id, a.nome AS autor,
-                      a.cargo AS autor_cargo, n.status, n.destaque, n.etiquetas, n.leituras,
-                      n.data_publicacao
+                      a.cargo AS autor_cargo, a.foto AS autor_foto, n.status, n.destaque,
+                      n.etiquetas, n.leituras, n.data_publicacao,
+                      n.imagem, n.imagem_legenda, n.imagem_credito
                FROM noticias n
                JOIN categorias c ON c.id = n.categoria_id
                JOIN autores a ON a.id = n.autor_id
@@ -343,28 +350,33 @@ class DatabaseManager:
         return linhas[0] if linhas else None
 
     def criar_noticia(self, titulo, conteudo, categoria_id, autor_id, data_publicacao,
-                      subtitulo=None, status="publicado", destaque=False, etiquetas=None):
+                      subtitulo=None, status="publicado", destaque=False, etiquetas=None,
+                      imagem=None, imagem_legenda=None, imagem_credito=None):
         """Insere a matéria e devolve o id gerado. Lança ErroBanco em caso de falha."""
         r = self._rodar(
             """INSERT INTO noticias (titulo, subtitulo, conteudo, categoria_id, autor_id,
-                                     data_publicacao, status, destaque, etiquetas)
-               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+                                     data_publicacao, status, destaque, etiquetas,
+                                     imagem, imagem_legenda, imagem_credito)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
             (titulo, subtitulo, conteudo, categoria_id, autor_id, data_publicacao,
-             status, 1 if destaque else 0, etiquetas),
+             status, 1 if destaque else 0, etiquetas, imagem, imagem_legenda, imagem_credito),
             commit=True,
         )
         return r["id"]
 
     def atualizar_noticia(self, noticia_id, titulo, conteudo, categoria_id, autor_id,
                           data_publicacao, subtitulo=None, status="publicado",
-                          destaque=False, etiquetas=None):
+                          destaque=False, etiquetas=None, imagem=None,
+                          imagem_legenda=None, imagem_credito=None):
         self._rodar(
             """UPDATE noticias
                SET titulo = %s, subtitulo = %s, conteudo = %s, categoria_id = %s, autor_id = %s,
-                   data_publicacao = %s, status = %s, destaque = %s, etiquetas = %s
+                   data_publicacao = %s, status = %s, destaque = %s, etiquetas = %s,
+                   imagem = %s, imagem_legenda = %s, imagem_credito = %s
                WHERE id = %s""",
             (titulo, subtitulo, conteudo, categoria_id, autor_id, data_publicacao,
-             status, 1 if destaque else 0, etiquetas, noticia_id),
+             status, 1 if destaque else 0, etiquetas, imagem, imagem_legenda,
+             imagem_credito, noticia_id),
             commit=True,
         )
 
@@ -394,6 +406,34 @@ class DatabaseManager:
                LIMIT %s""",
             (int(limite),), fetch=True,
         )
+
+    def listar_noticias_relacionadas(self, noticia_id, categoria_id, limite=3):
+        """Outras matérias PUBLICADAS da mesma editoria, das mais recentes para as
+        mais antigas ('leituras suplementares')."""
+        return self._rodar(
+            """SELECT n.id, n.titulo, n.subtitulo, SUBSTR(n.conteudo, 1, 400) AS resumo,
+                      c.nome AS categoria, c.cor AS categoria_cor, a.nome AS autor,
+                      n.data_publicacao
+               FROM noticias n
+               JOIN categorias c ON c.id = n.categoria_id
+               JOIN autores a ON a.id = n.autor_id
+               WHERE n.categoria_id = %s AND n.id <> %s AND n.status = 'publicado'
+               ORDER BY n.data_publicacao DESC, n.id DESC
+               LIMIT %s""",
+            (categoria_id, noticia_id, int(limite)), fetch=True,
+        )
+
+    def imagem_em_uso(self, caminho) -> bool:
+        """True se algum registro (capa, texto de matéria ou foto de autor) ainda
+        usa esse arquivo de imagem. Evita apagar do disco uma imagem referenciada."""
+        linhas = self._rodar(
+            """SELECT 1 AS usado FROM noticias WHERE imagem = %s OR conteudo LIKE %s
+               UNION
+               SELECT 1 AS usado FROM autores WHERE foto = %s
+               LIMIT 1""",
+            (caminho, _padrao_like(caminho), caminho), fetch=True,
+        )
+        return bool(linhas)
 
     def somar_leituras(self) -> int:
         linhas = self._rodar("SELECT COALESCE(SUM(leituras), 0) AS total FROM noticias", fetch=True)
@@ -484,12 +524,13 @@ class DatabaseManager:
             params.append(funcao)
         filtro = ("WHERE " + " AND ".join(condicoes)) if condicoes else ""
         query = f"""SELECT a.id, a.nome, a.email, a.bio, a.funcao, a.cargo, a.registro, a.status,
+                           a.foto,
                            COUNT(n.id) AS total_noticias,
                            MAX(n.data_publicacao) AS ultima_publicacao
                     FROM autores a
                     LEFT JOIN noticias n ON n.autor_id = a.id
                     {filtro}
-                    GROUP BY a.id, a.nome, a.email, a.bio, a.funcao, a.cargo, a.registro, a.status
+                    GROUP BY a.id, a.nome, a.email, a.bio, a.funcao, a.cargo, a.registro, a.status, a.foto
                     ORDER BY a.nome"""
         return self._rodar(query, tuple(params), fetch=True)
 
@@ -501,7 +542,7 @@ class DatabaseManager:
 
     def buscar_autor_por_id(self, autor_id):
         linhas = self._rodar(
-            """SELECT id, nome, email, bio, funcao, cargo, registro, status
+            """SELECT id, nome, email, bio, funcao, cargo, registro, status, foto
                FROM autores WHERE id = %s""",
             (autor_id,), fetch=True,
         )
@@ -515,23 +556,23 @@ class DatabaseManager:
         return bool(linhas)
 
     def criar_autor(self, nome, email=None, bio=None, funcao="reporter",
-                    cargo=None, registro=None, status="ativo"):
+                    cargo=None, registro=None, status="ativo", foto=None):
         """Insere o autor e devolve o id gerado."""
         r = self._rodar(
-            """INSERT INTO autores (nome, email, bio, funcao, cargo, registro, status)
-               VALUES (%s, %s, %s, %s, %s, %s, %s)""",
-            (nome, email, bio, funcao, cargo, registro, status), commit=True,
+            """INSERT INTO autores (nome, email, bio, funcao, cargo, registro, status, foto)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s)""",
+            (nome, email, bio, funcao, cargo, registro, status, foto), commit=True,
         )
         return r["id"]
 
     def atualizar_autor(self, autor_id, nome, email=None, bio=None, funcao="reporter",
-                        cargo=None, registro=None, status="ativo"):
+                        cargo=None, registro=None, status="ativo", foto=None):
         self._rodar(
             """UPDATE autores
                SET nome = %s, email = %s, bio = %s, funcao = %s, cargo = %s,
-                   registro = %s, status = %s
+                   registro = %s, status = %s, foto = %s
                WHERE id = %s""",
-            (nome, email, bio, funcao, cargo, registro, status, autor_id), commit=True,
+            (nome, email, bio, funcao, cargo, registro, status, foto, autor_id), commit=True,
         )
 
     def contar_noticias_do_autor(self, autor_id) -> int:

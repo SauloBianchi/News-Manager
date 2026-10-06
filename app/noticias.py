@@ -31,6 +31,7 @@ from datetime import date, datetime
 
 from .cadastros import Resultado, _ServicoBase, _limpar
 from .database import ErroBanco
+from .texto_rico import caminhos_de_imagens
 
 # chave gravada no banco -> rótulo mostrado na tela
 STATUS_NOTICIA = {
@@ -105,6 +106,8 @@ def interpretar_data(valor):
 class NoticiaService(_ServicoBase):
     TITULO_MIN, TITULO_MAX = 5, 120
     SUBTITULO_MAX = 300
+    LEGENDA_MAX = 255
+    CREDITO_MAX = 120
     CONTEUDO_MIN_PUBLICACAO = 30
     CONTEUDO_MAX = 50000
 
@@ -117,7 +120,10 @@ class NoticiaService(_ServicoBase):
             "conteudo": (dados.get("conteudo") or "").replace("\r\n", "\n").strip(),
             "status": dados.get("status") or "rascunho",
             "destaque": bool(dados.get("destaque")),
+            "imagem": dados.get("imagem") or None,
         }
+        d["imagem_legenda"] = (_limpar(dados.get("imagem_legenda")) or None) if d["imagem"] else None
+        d["imagem_credito"] = (_limpar(dados.get("imagem_credito")) or None) if d["imagem"] else None
         if not d["titulo"]:
             return d, "Informe o título da matéria."
         if not self.TITULO_MIN <= len(d["titulo"]) <= self.TITULO_MAX:
@@ -155,14 +161,24 @@ class NoticiaService(_ServicoBase):
         d["etiquetas"], erro = _normalizar_etiquetas(dados.get("etiquetas"))
         if erro:
             return d, erro
+
+        if d["imagem_legenda"] and len(d["imagem_legenda"]) > self.LEGENDA_MAX:
+            return d, f"A legenda da fotografia pode ter no máximo {self.LEGENDA_MAX} caracteres."
+        if d["imagem_credito"] and len(d["imagem_credito"]) > self.CREDITO_MAX:
+            return d, f"O crédito da fotografia pode ter no máximo {self.CREDITO_MAX} caracteres."
+        erro_imagem = self._checar_imagem(d["imagem"])
+        if erro_imagem:
+            return d, erro_imagem
         return d, None
 
     @staticmethod
     def _montar_dados(titulo, categoria_id, autor_id, conteudo, subtitulo, status,
-                      destaque, etiquetas, data):
+                      destaque, etiquetas, data, imagem=None, imagem_legenda="",
+                      imagem_credito=""):
         return dict(titulo=titulo, categoria_id=categoria_id, autor_id=autor_id,
                     conteudo=conteudo, subtitulo=subtitulo, status=status,
-                    destaque=destaque, etiquetas=etiquetas, data=data)
+                    destaque=destaque, etiquetas=etiquetas, data=data, imagem=imagem,
+                    imagem_legenda=imagem_legenda, imagem_credito=imagem_credito)
 
     @staticmethod
     def _mensagem_sucesso(d, acao):
@@ -199,6 +215,17 @@ class NoticiaService(_ServicoBase):
             return Resultado(False, "Matéria não encontrada.")
         return Resultado(True, "", noticia)
 
+    def relacionadas(self, noticia_id: int, limite: int = 3) -> Resultado:
+        """Leituras suplementares: outras matérias publicadas da mesma editoria."""
+        try:
+            noticia = self.db.buscar_noticia_por_id(noticia_id)
+            if not noticia:
+                return Resultado(False, "Matéria não encontrada.")
+            itens = self.db.listar_noticias_relacionadas(noticia_id, noticia["categoria_id"], limite)
+        except ErroBanco as e:
+            return self._falha_banco("Erro ao buscar leituras suplementares", e)
+        return Resultado(True, "", itens)
+
     def resumo(self) -> Resultado:
         """Números do painel lateral 'Cadência da Tiragem'."""
         try:
@@ -223,15 +250,18 @@ class NoticiaService(_ServicoBase):
     # ---------- escrita ----------
     def criar(self, titulo: str, categoria_id, autor_id, conteudo: str = "", subtitulo: str = "",
               status: str = "rascunho", destaque: bool = False, etiquetas: str = "",
-              data=None) -> Resultado:
+              data=None, imagem: str = None, imagem_legenda: str = "",
+              imagem_credito: str = "") -> Resultado:
         try:
             d, erro = self._validar(self._montar_dados(
-                titulo, categoria_id, autor_id, conteudo, subtitulo, status, destaque, etiquetas, data))
+                titulo, categoria_id, autor_id, conteudo, subtitulo, status, destaque, etiquetas,
+                data, imagem, imagem_legenda, imagem_credito))
             if erro:
                 return Resultado(False, erro)
             novo_id = self.db.criar_noticia(
                 d["titulo"], d["conteudo"], d["categoria_id"], d["autor_id"], d["data"],
-                d["subtitulo"], d["status"], d["destaque"], d["etiquetas"])
+                d["subtitulo"], d["status"], d["destaque"], d["etiquetas"],
+                d["imagem"], d["imagem_legenda"], d["imagem_credito"])
         except ErroBanco as e:
             return self._falha_banco("Erro ao criar notícia", e)
         self.logger.info(f"Notícia criada: {d['titulo']} (id {novo_id}, {d['status']})")
@@ -239,7 +269,8 @@ class NoticiaService(_ServicoBase):
 
     def atualizar(self, noticia_id: int, titulo: str, categoria_id, autor_id, conteudo: str = "",
                   subtitulo: str = "", status: str = "rascunho", destaque: bool = False,
-                  etiquetas: str = "", data=None) -> Resultado:
+                  etiquetas: str = "", data=None, imagem: str = None,
+                  imagem_legenda: str = "", imagem_credito: str = "") -> Resultado:
         try:
             atual = self.db.buscar_noticia_por_id(noticia_id)
             if not atual:
@@ -247,14 +278,21 @@ class NoticiaService(_ServicoBase):
             if data in (None, ""):
                 data = atual["data_publicacao"]  # editar sem mexer na data mantém a original
             d, erro = self._validar(self._montar_dados(
-                titulo, categoria_id, autor_id, conteudo, subtitulo, status, destaque, etiquetas, data))
+                titulo, categoria_id, autor_id, conteudo, subtitulo, status, destaque, etiquetas,
+                data, imagem, imagem_legenda, imagem_credito))
             if erro:
                 return Resultado(False, erro)
             self.db.atualizar_noticia(
                 noticia_id, d["titulo"], d["conteudo"], d["categoria_id"], d["autor_id"], d["data"],
-                d["subtitulo"], d["status"], d["destaque"], d["etiquetas"])
+                d["subtitulo"], d["status"], d["destaque"], d["etiquetas"],
+                d["imagem"], d["imagem_legenda"], d["imagem_credito"])
         except ErroBanco as e:
             return self._falha_banco("Erro ao atualizar notícia", e)
+        if atual.get("imagem") != d["imagem"]:
+            self._descartar_imagem(atual.get("imagem"))   # a capa antiga deixou de ser usada
+        # imagens do meio do texto que saíram da matéria
+        for caminho in caminhos_de_imagens(atual.get("conteudo")) - caminhos_de_imagens(d["conteudo"]):
+            self._descartar_imagem(caminho)
         self.logger.info(f"Notícia {noticia_id} atualizada: {d['titulo']} ({d['status']})")
         return Resultado(True, self._mensagem_sucesso(d, "atualizada"), noticia_id)
 
@@ -266,6 +304,9 @@ class NoticiaService(_ServicoBase):
             self.db.excluir_noticia(noticia_id)
         except ErroBanco as e:
             return self._falha_banco("Erro ao excluir notícia", e)
+        self._descartar_imagem(noticia.get("imagem"))
+        for caminho in caminhos_de_imagens(noticia.get("conteudo")):
+            self._descartar_imagem(caminho)
         self.logger.info(f"Notícia {noticia_id} excluída: {noticia['titulo']}")
         return Resultado(True, f"Matéria \"{noticia['titulo']}\" excluída.")
 

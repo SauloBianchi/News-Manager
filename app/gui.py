@@ -32,8 +32,11 @@ from .auth import (
     ConfiguracaoEmailAusente,
 )
 from . import theme as t
+from .midia import midia as midia_global
 from .telas_cadastros import CategoriasFrame, AutoresFrame, _cabecalho
 from .tela_noticias import NoticiasFrame
+from .tela_editor import EditorFrame
+from .tela_leitura import LeituraFrame
 from .shell import Cabecalho, AreaAbas, Rodape
 
 
@@ -889,7 +892,7 @@ class MainWindow(tk.Tk):
         self.title(f"NewsManager - Sistema de Gerenciamento e Análise de Notícias{titulo_usuario}")
         self.configure(bg=t.BG)
         self.geometry("1280x860")
-        self.minsize(1100, 700)
+        self.minsize(1180, 700)
 
         self._montar_layout()
         self.mostrar_aba("noticias")
@@ -910,13 +913,23 @@ class MainWindow(tk.Tk):
 
         # Telas do layout Stitch (app/tela_noticias.py e app/telas_cadastros.py)
         self.aba_noticias = NoticiasFrame(
-            self.area, self.db, self.logger, ao_alterar=self._apos_alterar_cadastros)
+            self.area, self.db, self.logger, ao_alterar=self._apos_alterar_cadastros,
+            ao_ler=self.abrir_leitura, ao_editar_completo=self.abrir_editor)
         self.aba_categorias = CategoriasFrame(
             self.area, self.db, self.logger, ao_alterar=self._apos_alterar_cadastros)
         self.aba_autores = AutoresFrame(
             self.area, self.db, self.logger, ao_alterar=self._apos_alterar_cadastros)
         self.aba_grafico = tk.Frame(self.area, bg=t.BG)
         self.aba_seguranca = tk.Frame(self.area, bg=t.BG)
+        # Telas "inteiras" que não aparecem na navegação: editor redacional e leitura
+        self.aba_editor = EditorFrame(
+            self.area, self.db, self.logger, ao_ler=self.abrir_leitura,
+            ao_voltar=lambda: self.mostrar_aba("noticias"), ao_alterar=self._apos_alterar_cadastros)
+        self.aba_leitura = LeituraFrame(
+            self.area, self.db, self.logger,
+            ao_voltar=lambda: self.mostrar_aba("noticias"), ao_editar=self.abrir_editor,
+            ao_abrir=self.abrir_leitura, ao_buscar=self._buscar_no_feed,
+            ao_categoria=self._filtrar_feed_categoria, ao_alterar=self._apos_alterar_cadastros)
 
         # Mesma ordem da navegação do protótipo
         self.area.adicionar("noticias", self.aba_noticias)
@@ -924,14 +937,24 @@ class MainWindow(tk.Tk):
         self.area.adicionar("autores", self.aba_autores)
         self.area.adicionar("graficos", self.aba_grafico)
         self.area.adicionar("seguranca", self.aba_seguranca)
+        self.area.adicionar("editor", self.aba_editor)
+        self.area.adicionar("leitura", self.aba_leitura)
 
         self._montar_aba_grafico()
         self._montar_aba_seguranca()
 
     # ---------- Navegação ----------
+    def _pode_sair_da_tela(self) -> bool:
+        """Se o editor tem alterações não salvas, pergunta antes de sair dele."""
+        if self.area.atual == "editor":
+            return self.aba_editor.confirmar_saida()
+        return True
+
     def mostrar_aba(self, chave):
         """Troca de tela e recarrega os dados dela (as contagens de matérias
         por categoria/autor podem ter mudado em outra aba)."""
+        if chave != self.area.atual and not self._pode_sair_da_tela():
+            return
         self.area.mostrar(chave)
         self.cabecalho.definir_ativa(chave)
         if chave in ("noticias", "categorias", "autores"):
@@ -939,9 +962,32 @@ class MainWindow(tk.Tk):
         elif chave == "graficos":
             self._desenhar_grafico()
 
-    def _nova_materia(self):
+    def abrir_editor(self, noticia_id=None, dados_iniciais=None):
+        """Abre o editor redacional (matéria nova, existente ou com dados do editor rápido)."""
+        if self.area.atual == "editor" and not self._pode_sair_da_tela():
+            return
+        self.area.mostrar("editor")
+        self.cabecalho.definir_ativa("noticias")
+        self.aba_editor.carregar(noticia_id, dados_iniciais)
+
+    def abrir_leitura(self, noticia_id, contar_leitura=True):
+        """Abre a página de leitura de uma matéria."""
+        if not self._pode_sair_da_tela():
+            return
+        self.area.mostrar("leitura")
+        self.cabecalho.definir_ativa("noticias")
+        self.aba_leitura.carregar(noticia_id, contar_leitura)
+
+    def _buscar_no_feed(self, termo):
         self.mostrar_aba("noticias")
-        self.aba_noticias.nova_materia()
+        self.aba_noticias.buscar(termo)
+
+    def _filtrar_feed_categoria(self, categoria_id):
+        self.mostrar_aba("noticias")
+        self.aba_noticias.filtrar_categoria(categoria_id)
+
+    def _nova_materia(self):
+        self.abrir_editor()
 
     def _banco_conectado(self):
         conexao = getattr(self.db, "connection", None)
@@ -959,6 +1005,7 @@ class MainWindow(tk.Tk):
         if not messagebox.askyesno("Sair", "Deseja encerrar a sessão e voltar ao login?"):
             return
         self.logger.info(f"Logout: {self.usuario.get('usuario')}")
+        midia_global.limpar_cache()   # as imagens do Tk antigo não valem na próxima janela
         self.destroy()
         LoginWindow(self.db, self.logger).mainloop()
 
