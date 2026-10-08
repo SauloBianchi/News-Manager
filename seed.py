@@ -11,6 +11,9 @@ Uso (na pasta do projeto, com o MySQL rodando):
     python seed.py --autosave      também cria um auto-salvamento de exemplo, para
                                    testar a recuperação no editor ("+ Nova matéria")
     python seed.py --sem-imagens   não gera capas nem fotos (não precisa de Pillow)
+    python seed.py --volume 300    quantidade de matérias extras para os gráficos (padrão 120;
+                                   0 = não cria). Elas ficam espalhadas pelos últimos 120 dias,
+                                   com picos às terças e quartas, para as estatísticas fazerem sentido.
 
 Opções de conexão (iguais às do main.py por padrão):
     --host localhost --usuario root --senha "" --banco newsmanager
@@ -30,6 +33,7 @@ ROTEIRO_DE_TESTE.md.
 import argparse
 import json
 import math
+import random
 import re
 import sys
 import tempfile
@@ -41,6 +45,7 @@ sys.path.insert(0, str(RAIZ))
 
 from app.cadastros import AutorService, CategoriaService  # noqa: E402
 from app.database import DatabaseManager, ErroBanco  # noqa: E402
+from app.estatisticas import EstatisticasService, FiltroEstatisticas  # noqa: E402
 from app.logger import Logger  # noqa: E402
 from app.midia import ErroMidia, disponivel as pillow_disponivel  # noqa: E402
 from app.midia import midia as gerenciador_midia  # noqa: E402
@@ -60,6 +65,7 @@ from app.texto_rico import (  # noqa: E402
 DOMINIO_EMAIL = "seed.newsmanager.local"
 CATEGORIAS_DO_SCHEMA = {"Política", "Esportes", "Tecnologia", "Economia"}   # vêm do schema.sql: nunca removidas
 MARCA_AUTOSAVE = "Rascunho recuperável (exemplo do seed)"
+PREFIXO_VOLUME = "Volume #"
 
 # ---------------------------------------------------------------------------
 # Dados
@@ -367,7 +373,7 @@ def importar(caminho: Path, pasta: str):
 # ---------------------------------------------------------------------------
 # Popular
 # ---------------------------------------------------------------------------
-def popular(db, logger, com_imagens=True, autosave=False):
+def popular(db, logger, com_imagens=True, autosave=False, volume=0):
     cs = CategoriaService(db, logger)
     au = AutorService(db, logger, gerenciador_midia)
     ns = NoticiaService(db, logger, gerenciador_midia)
@@ -450,6 +456,8 @@ def popular(db, logger, com_imagens=True, autosave=False):
             criadas["noticias"] += 1
             print(f"  + [{m['status']:<9}] {m['titulo'][:70]}")
 
+    criadas["noticias"] += popular_volume(db, logger, volume)
+
     if autosave:
         pasta = RAIZ / "rascunhos"
         pasta.mkdir(exist_ok=True)
@@ -467,6 +475,65 @@ def popular(db, logger, com_imagens=True, autosave=False):
 
 
 # ---------------------------------------------------------------------------
+# Volume: matérias extras para os gráficos
+# ---------------------------------------------------------------------------
+TEMAS_VOLUME = {
+    "Política": ["Boletim do plenário", "Ata da comissão", "Resumo da sessão", "Balanço legislativo"],
+    "Economia & Negócios": ["Fechamento dos mercados", "Indicador da semana", "Balanço trimestral", "Câmbio e juros"],
+    "Tecnologia & Ciência": ["Descoberta em laboratório", "Lançamento tecnológico", "Estudo publicado", "Inovação aplicada"],
+    "Cultura & Artes": ["Estreia da semana", "Exposição em cartaz", "Crítica do fim de semana", "Agenda cultural"],
+    "Mundo & Diplomacia": ["Despacho internacional", "Acordo bilateral", "Cúpula de líderes", "Panorama global"],
+    "Opinião & Artigos": ["Artigo de opinião", "Carta do leitor", "Coluna de análise", "Ponto de vista"],
+    "Esportes & Lazer": ["Resultado da rodada", "Análise tática", "Bastidores do campeonato"],
+    "Meio Ambiente & Clima": ["Alerta climático", "Relatório ambiental", "Energia limpa em pauta"],
+}
+PESO_CATEGORIA = {"Política": 30, "Economia & Negócios": 24, "Tecnologia & Ciência": 20, "Cultura & Artes": 14,
+                  "Mundo & Diplomacia": 12, "Opinião & Artigos": 9, "Esportes & Lazer": 5, "Meio Ambiente & Clima": 6}
+AUTORES_VOLUME = {"Teresa Castelo": 3, "Henrique Alcântara": 3, "Beatriz Lins": 2, "Gabriel Esteves": 2,
+                  "Sofia Ramalho": 1.5, "Roberto Fontes": 1, "Carlos Eduardo Silva": 2, "Mariana Alencar": 1}
+PESO_DIA_SEMANA = [1.0, 1.5, 1.7, 1.6, 1.4, 0.5, 0.25]      # segunda ... domingo (picos: terça e quarta)
+
+
+def popular_volume(db, logger, quantidade):
+    """Cria `quantidade` matérias curtas espalhadas pelos últimos 120 dias (sempre as mesmas, por usar
+    uma semente fixa). Joana Freitas fica sem matérias de propósito (teste de exclusão)."""
+    if quantidade <= 0:
+        return 0
+    ns = NoticiaService(db, logger, gerenciador_midia)
+    cats = {n: id_por(db, "categorias", "nome", n) for n in PESO_CATEGORIA}
+    autores = {n: id_por(db, "autores", "nome", n) for n in AUTORES_VOLUME}
+    if not all(cats.values()) or not all(autores.values()):
+        print("! Volume ignorado: rode o seed completo antes (faltam editorias ou autores).")
+        return 0
+    agora = datetime.now().replace(second=0, microsecond=0)
+    criadas = 0
+    for numero in range(1, quantidade + 1):
+        rnd = random.Random(2024 * 1000 + numero)    # cada matéria tem a própria semente: rodar de novo não duplica
+        while True:      # sorteia um dia respeitando o peso de cada dia da semana
+            data = (agora - timedelta(days=rnd.randint(0, 119))).replace(hour=rnd.randint(7, 21), minute=rnd.randint(0, 59))
+            if data < agora and rnd.random() <= PESO_DIA_SEMANA[data.weekday()] / max(PESO_DIA_SEMANA):
+                break
+        categoria = rnd.choices(list(PESO_CATEGORIA), weights=list(PESO_CATEGORIA.values()))[0]
+        autor = rnd.choices(list(AUTORES_VOLUME), weights=list(AUTORES_VOLUME.values()))[0]
+        titulo = f"{PREFIXO_VOLUME}{numero:03d} — {rnd.choice(TEMAS_VOLUME[categoria])}"
+        if id_por(db, "noticias", "titulo", titulo):
+            continue
+        sorteio = rnd.random()
+        status = "publicado" if sorteio < 0.88 else "revisao" if sorteio < 0.94 else "rascunho" if sorteio < 0.98 else "em_pauta"
+        corpo = corpo_curto(titulo, rnd.randint(1, 6))
+        r = ns.criar(titulo, cats[categoria], autores[autor], corpo, "", status, False, "#Volume", data)
+        if not r.ok:
+            print(f"  ! {titulo}: {r.mensagem}")
+            continue
+        if status == "publicado":
+            leituras = int(rnd.lognormvariate(6.2, 0.9) * (1.6 if categoria == "Política" else 1.0))
+            db._rodar("UPDATE noticias SET leituras = %s WHERE id = %s", (leituras, r.dados), commit=True)
+        criadas += 1
+    print(f"Volume: {criadas} matérias extras criadas (títulos começam com \"{PREFIXO_VOLUME}\").")
+    return criadas
+
+
+# ---------------------------------------------------------------------------
 # Limpar (só o que o seed criou)
 # ---------------------------------------------------------------------------
 def limpar(db, logger):
@@ -474,6 +541,9 @@ def limpar(db, logger):
     au = AutorService(db, logger, gerenciador_midia)
     ns = NoticiaService(db, logger, gerenciador_midia)
     removidos = {"noticias": 0, "autores": 0, "categorias": 0}
+    for linha in db._rodar("SELECT id FROM noticias WHERE titulo LIKE %s", (PREFIXO_VOLUME + "%",), fetch=True):
+        if ns.excluir(linha["id"]).ok:
+            removidos["noticias"] += 1
     for titulo in titulos_do_seed():
         id_ = id_por(db, "noticias", "titulo", titulo)
         if id_ and ns.excluir(id_).ok:
@@ -684,10 +754,80 @@ def verificar(db, logger):
         else:
             v.checar("nenhuma imagem órfã em midia/", True)
 
+    verificar_estatisticas(v, db, logger, ns)
+
     print(f"\nResultado: {v.ok} verificações OK, {len(v.falhas)} falha(s), {len(v.avisos)} aviso(s).")
     for nome in v.falhas:
         print(f"  - FALHA: {nome}")
     return v
+
+
+def verificar_estatisticas(v, db, logger, ns):
+    """Confere a tela de Gráficos: indicadores coerentes entre si e com a listagem de matérias."""
+    print("\nEstatísticas (tela de Gráficos)")
+    es = EstatisticasService(db, logger)
+    agora = datetime.now().replace(microsecond=0)
+    resultados = {p: es.consultar(FiltroEstatisticas(p), agora) for p in ("7d", "30d", "90d", "12m", "ano", "tudo")}
+    v.checar("consultas por período funcionam", all(r.ok for r in resultados.values()),
+             str([p for p, r in resultados.items() if not r.ok]))
+    if not all(r.ok for r in resultados.values()):
+        return
+    totais = [resultados[p].dados["kpis"]["total"] for p in ("7d", "30d", "90d", "tudo")]
+    v.checar("períodos mais longos nunca têm menos matérias", totais == sorted(totais), str(totais))
+    d = resultados["30d"].dados
+    k = d["kpis"]
+    v.checar("editorias somam o total", sum(c["total"] for c in d["categorias"]) == k["total"])
+    v.checar("percentuais somam 100%", k["total"] == 0 or abs(sum(c["percentual"] for c in d["categorias"]) - 100) < 0.01)
+    v.checar("dias da semana somam o total", sum(d["semana"]["totais"]) == k["total"])
+    v.checar("série temporal soma o total", sum(d["serie"]["valores"]) == k["total"])
+    v.checar("scores dos autores entre 0 e 100", all(0 <= a["score"] <= 100 for a in d["autores"]))
+    v.checar("autores somam o total", sum(a["total"] for a in d["autores"]) == k["total"])
+    v.checar("indicadores têm sentido", 0 <= k["pct_editorias"] <= 100 and k["editorias_operacao"] <= k["editorias_ativas"]
+             and k["media_leituras"] >= 0, str(k))
+    v.checar("comparação com o período anterior", k["total_anterior"] is None or isinstance(k["total_anterior"], int))
+    v.checar("leitura dos dados gera frases", len(d["insights"]) >= 1 and all(isinstance(f, str) and f for f in d["insights"]))
+    tudo = resultados["tudo"].dados
+    futuras = db._rodar("SELECT COUNT(*) AS n FROM noticias WHERE status = 'publicado' AND data_publicacao > %s",
+                        (agora,), fetch=True)[0]["n"]
+    publicadas = ns.listar(status="publicado").dados["total"]
+    v.checar("estatística de 'todo o período' bate com o feed (menos as embargadas)",
+             tudo["kpis"]["total"] == publicadas - int(futuras), f"{tudo['kpis']['total']} vs {publicadas} - {futuras}")
+    v.checar("todo o período não tem comparação", tudo["kpis"]["variacao_total"] is None and tudo["periodo"]["dias"] >= 1)
+    # filtros combinados
+    if tudo["categorias"] and tudo["categorias"][0]["total"]:
+        cat = tudo["categorias"][0]
+        f = es.consultar(FiltroEstatisticas("tudo", categoria_id=cat["id"]), agora).dados
+        v.checar("filtro de editoria isola a editoria", f["kpis"]["total"] == cat["total"] and
+                 [c["nome"] for c in f["categorias"]] == [cat["nome"]])
+    if tudo["autores"]:
+        aut = tudo["autores"][0]
+        f = es.consultar(FiltroEstatisticas("tudo", autor_id=aut["id"]), agora).dados
+        v.checar("filtro de jornalista isola o jornalista", f["kpis"]["total"] == aut["total"] and len(f["autores"]) == 1)
+    todos = es.consultar(FiltroEstatisticas("tudo", status="todos"), agora).dados["kpis"]["total"]
+    v.checar("'todos os estados' tem pelo menos as publicadas", todos >= tudo["kpis"]["total"])
+    rascunhos = es.consultar(FiltroEstatisticas("tudo", status="rascunho"), agora).dados["kpis"]["total"]
+    v.checar("filtro por estado (rascunho)", rascunhos >= 1, str(rascunhos))
+    pers = es.consultar(FiltroEstatisticas("personalizado", inicio=(agora - timedelta(days=10)).date(), fim=agora.date()), agora)
+    v.checar("período personalizado", pers.ok and pers.dados["periodo"]["dias"] == 11, pers.mensagem)
+    v.checar("período personalizado inválido é recusado", not es.consultar(
+        FiltroEstatisticas("personalizado", inicio=agora.date(), fim=(agora - timedelta(days=3)).date()), agora).ok)
+    vazio = es.consultar(FiltroEstatisticas("7d", status="em_pauta", categoria_id=id_por(db, "categorias", "nome", "Saúde & Bem-estar") or 0), agora)
+    v.checar("recorte vazio não quebra", vazio.ok and vazio.dados["kpis"]["total"] == 0)
+    # gráficos e relatório
+    try:
+        from app.graficos import exportar_pdf, figura_distribuicao, figura_semana, figura_serie
+    except ImportError as erro:
+        v.avisar("matplotlib não instalado", f"gráficos e PDF não verificados ({erro})")
+        return
+    figuras = [figura_distribuicao(d["categorias"]), figura_semana(d["semana"]), figura_serie(d["serie"])]
+    v.checar("gráficos do matplotlib são criados", all(f.get_axes() for f in figuras))
+    with tempfile.TemporaryDirectory() as tmp:
+        caminho = Path(tmp) / "relatorio.pdf"
+        paginas = exportar_pdf(caminho, d, "verificação do seed")
+        v.checar("relatório em PDF (3 páginas)", paginas == 3 and caminho.read_bytes()[:4] == b"%PDF" and caminho.stat().st_size > 5000,
+                 f"{caminho.stat().st_size} bytes")
+    linhas = es.linhas_csv(d)
+    v.checar("dados do CSV", len(linhas) > 10 and linhas[0][0].startswith("Relatório"))
 
 
 # ---------------------------------------------------------------------------
@@ -741,6 +881,7 @@ def main():
     ap.add_argument("--recriar", action="store_true", help="limpar + popular + verificar")
     ap.add_argument("--autosave", action="store_true", help="cria um auto-salvamento de exemplo para o editor")
     ap.add_argument("--sem-imagens", action="store_true", help="não gera capas nem fotos")
+    ap.add_argument("--volume", type=int, default=120, help="matérias extras para os gráficos (padrão 120; 0 = nenhuma)")
     ap.add_argument("--host", default="localhost")
     ap.add_argument("--usuario", default="root")
     ap.add_argument("--senha", default="")
@@ -766,7 +907,7 @@ def main():
             if args.recriar:
                 limpar(db, logger)
                 print()
-            popular(db, logger, com_imagens=not args.sem_imagens, autosave=args.autosave)
+            popular(db, logger, com_imagens=not args.sem_imagens, autosave=args.autosave, volume=max(0, args.volume))
             falhou = bool(verificar(db, logger).falhas)
     finally:
         db.desconectar()

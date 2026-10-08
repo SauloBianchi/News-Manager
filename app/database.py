@@ -435,6 +435,130 @@ class DatabaseManager:
         )
         return bool(linhas)
 
+    # ---------- Estatísticas (tela de Gráficos) ----------
+    # Todas aceitam os mesmos filtros: período (inicio/fim), editoria, autor e
+    # estado da matéria. Lançam ErroBanco em caso de falha.
+    @staticmethod
+    def _condicoes_estat(inicio=None, fim=None, categoria_id=None, autor_id=None, status=None):
+        """Condições sobre a tabela `noticias` (alias n) e seus parâmetros."""
+        condicoes, params = [], []
+        if inicio:
+            condicoes.append("n.data_publicacao >= %s")
+            params.append(inicio)
+        if fim:
+            condicoes.append("n.data_publicacao <= %s")
+            params.append(fim)
+        if categoria_id:
+            condicoes.append("n.categoria_id = %s")
+            params.append(categoria_id)
+        if autor_id:
+            condicoes.append("n.autor_id = %s")
+            params.append(autor_id)
+        if status:
+            condicoes.append("n.status = %s")
+            params.append(status)
+        return condicoes, params
+
+    # Estimativa de palavras direto no SQL: espaços (e quebras de linha) + 1.
+    # A quebra de linha vai como parâmetro para funcionar igual em qualquer SQL.
+    _PALAVRAS_SQL = (
+        "(CASE WHEN n.conteudo IS NULL OR n.conteudo = '' THEN 0 ELSE "
+        "LENGTH(REPLACE(n.conteudo, %s, ' ')) - "
+        "LENGTH(REPLACE(REPLACE(n.conteudo, %s, ' '), ' ', '')) + 1 END)"
+    )
+
+    def estatisticas_resumo(self, **filtros):
+        """Totais do recorte: matérias, leituras (soma e média), média de palavras,
+        editorias distintas e datas da primeira e da última matéria."""
+        condicoes, params = self._condicoes_estat(**filtros)
+        where = ("WHERE " + " AND ".join(condicoes)) if condicoes else ""
+        linhas = self._rodar(
+            f"""SELECT COUNT(*) AS total,
+                       COALESCE(SUM(n.leituras), 0) AS leituras,
+                       COALESCE(AVG(n.leituras), 0) AS media_leituras,
+                       COALESCE(AVG({self._PALAVRAS_SQL}), 0) AS media_palavras,
+                       COUNT(DISTINCT n.categoria_id) AS categorias,
+                       MIN(n.data_publicacao) AS primeira,
+                       MAX(n.data_publicacao) AS ultima
+                FROM noticias n {where}""",
+            tuple(["\n", "\n"] + params), fetch=True,
+        )
+        return linhas[0]
+
+    def estatisticas_por_categoria(self, **filtros):
+        """Uma linha por editoria (inclusive as sem matérias no recorte), das mais
+        para as menos movimentadas: id, nome, cor, status, total, leituras."""
+        categoria_id = filtros.pop("categoria_id", None)
+        condicoes, params = self._condicoes_estat(**filtros)
+        juncao = "".join(f" AND {c}" for c in condicoes)
+        where, params_where = "", []
+        if categoria_id:
+            where, params_where = "WHERE c.id = %s", [categoria_id]
+        return self._rodar(
+            f"""SELECT c.id, c.nome, c.cor, c.status,
+                       COUNT(n.id) AS total, COALESCE(SUM(n.leituras), 0) AS leituras
+                FROM categorias c
+                LEFT JOIN noticias n ON n.categoria_id = c.id{juncao}
+                {where}
+                GROUP BY c.id, c.nome, c.cor, c.status
+                ORDER BY total DESC, c.nome""",
+            tuple(params + params_where), fetch=True,
+        )
+
+    def estatisticas_por_autor(self, limite=None, **filtros):
+        """Produção por jornalista no recorte (só quem tem matérias): id, nome,
+        cargo, total e soma de leituras. Mais produtivos primeiro."""
+        condicoes, params = self._condicoes_estat(**filtros)
+        where = ("WHERE " + " AND ".join(condicoes)) if condicoes else ""
+        paginacao = ""
+        if limite:
+            paginacao, params = "LIMIT %s", params + [int(limite)]
+        return self._rodar(
+            f"""SELECT a.id, a.nome, a.cargo, COUNT(n.id) AS total,
+                       COALESCE(SUM(n.leituras), 0) AS leituras
+                FROM noticias n
+                JOIN autores a ON a.id = n.autor_id
+                {where}
+                GROUP BY a.id, a.nome, a.cargo
+                ORDER BY total DESC, leituras DESC, a.nome
+                {paginacao}""",
+            tuple(params), fetch=True,
+        )
+
+    def estatisticas_datas(self, **filtros):
+        """Datas de emissão das matérias do recorte (para agrupar por dia da
+        semana e por período no Python, igual em qualquer banco)."""
+        condicoes, params = self._condicoes_estat(**filtros)
+        where = ("WHERE " + " AND ".join(condicoes)) if condicoes else ""
+        linhas = self._rodar(
+            f"SELECT n.data_publicacao FROM noticias n {where} ORDER BY n.data_publicacao",
+            tuple(params), fetch=True,
+        )
+        return [linha["data_publicacao"] for linha in linhas]
+
+    def estatisticas_por_status(self, **filtros):
+        """{estado: total} do recorte (ignora o filtro de estado)."""
+        filtros.pop("status", None)
+        condicoes, params = self._condicoes_estat(**filtros)
+        where = ("WHERE " + " AND ".join(condicoes)) if condicoes else ""
+        linhas = self._rodar(
+            f"SELECT n.status, COUNT(*) AS total FROM noticias n {where} GROUP BY n.status",
+            tuple(params), fetch=True,
+        )
+        return {linha["status"]: int(linha["total"]) for linha in linhas}
+
+    def contar_categorias_por_status(self, status="ativa") -> int:
+        linhas = self._rodar(
+            "SELECT COUNT(*) AS total FROM categorias WHERE status = %s", (status,), fetch=True)
+        return int(linhas[0]["total"])
+
+    def ultima_publicacao(self, ate):
+        """Data da última matéria publicada até `ate` (None se não houver)."""
+        linhas = self._rodar(
+            "SELECT MAX(data_publicacao) AS ultima FROM noticias "
+            "WHERE status = 'publicado' AND data_publicacao <= %s", (ate,), fetch=True)
+        return linhas[0]["ultima"]
+
     def somar_leituras(self) -> int:
         linhas = self._rodar("SELECT COALESCE(SUM(leituras), 0) AS total FROM noticias", fetch=True)
         return int(linhas[0]["total"])

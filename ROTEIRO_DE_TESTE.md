@@ -20,6 +20,7 @@ Outras opções do seed:
 | `python seed.py --recriar` | apaga o que o seed criou e cria tudo de novo |
 | `python seed.py --limpar` | remove só os dados do seed (e as imagens deles) |
 | `python seed.py --sem-imagens` | popula sem capas/fotos |
+| `python seed.py --volume 300` | quantidade de matérias extras para os gráficos (padrão 120; 0 = nenhuma) |
 
 O seed nunca mexe no que **você** cadastrou. Se algum item da verificação aparecer como
 `FALHA`, copie a saída do terminal e me envie.
@@ -106,9 +107,30 @@ O seed nunca mexe no que **você** cadastrou. Se algum item da verificação apa
 - [ ] Copiar referência, Exportar HTML (abrir no navegador e imprimir/salvar em PDF), Editar e Excluir.
 - [ ] Redimensionar a janela com a página aberta não deixa o texto cortado nem com espaço sobrando.
 
-## 7. Gráficos e Segurança
+## 7. Gráficos & Análise
 
-- [ ] O gráfico "Notícias por Categoria" reflete os dados do seed e atualiza depois de criar/excluir matérias.
+Rode antes `python seed.py` (ele cria 120 matérias extras espalhadas pelos últimos 120 dias, com
+picos às terças e quartas, para os gráficos terem o que mostrar).
+
+- [ ] Abrir a aba **Gráficos**: 4 indicadores, gráfico de barras "Notícias por Categoria", "Evolução no Período", "Produtividade por Autor", "Volume ao Longo da Semana", "Pipeline Redatorial", "Leitura dos dados" e "Meta do período".
+- [ ] As barras ficam ordenadas da editoria com mais matérias para a com menos, cada uma com sua cor, número e percentual; as editorias sem matérias não aparecem.
+- [ ] **Período**: Últimos 7 / 30 / 90 dias, 12 meses, Este ano e Todo o período mudam todos os números e gráficos. Em "Todo o período" a comparação some ("sem comparação") e a evolução passa a ser por mês.
+- [ ] **Personalizado…**: aparecem os campos de data; datas inválidas (`32/13/2024`) ou início depois do fim avisam; datas válidas aplicam.
+- [ ] **Editoria**: escolher uma editoria isola o gráfico e todos os números nela. **Jornalista** faz o mesmo por autor.
+- [ ] **Estado da matéria**: "Publicadas" (padrão), "Todos os estados", Rascunhos, Em pauta e Em revisão; o rótulo do primeiro indicador muda para "Total de matérias" quando não é "Publicadas".
+- [ ] Combinar filtros que não têm resultado (ex.: Joana Freitas + qualquer editoria) mostra o aviso de recorte vazio, sem erro.
+- [ ] **Limpar filtros** volta ao padrão (30 dias, publicadas, tudo).
+- [ ] Indicador "Total publicado" mostra a variação contra o período anterior (↑ verde / ↓ vermelho); "Editorias em operação" mostra X de Y editorias ativas; a média de leituras também compara com o período anterior.
+- [ ] "Produtividade por Autor" mostra os 5 primeiros com cargo e score; "Ver tabela completa" abre todos, com leituras e média.
+- [ ] "Volume ao Longo da Semana" destaca em vermelho e negrito os dias de pico (terça e quarta no seed) e a observação crítica cita esses dias.
+- [ ] "Pipeline Redatorial" mostra a última publicação e a fila de revisão; criar uma matéria em outra aba e voltar atualiza os números. A tela também se atualiza sozinha a cada minuto.
+- [ ] **Meta do período**: editar o número e apertar Enter muda a barra e o texto; fechar e reabrir o programa mantém a meta e o último período/estado escolhidos (`config/graficos.json`).
+- [ ] **Exportar relatório PDF** gera um arquivo de 3 páginas (indicadores e autores, distribuição, semana e evolução) que abre no leitor de PDF; **Exportar CSV** abre no Excel com acentos corretos.
+- [ ] Redimensionar a janela: os gráficos acompanham a largura dos cartões e nada fica cortado.
+- [ ] Com o MySQL parado, a tela mostra o erro sem fechar o programa.
+
+## 7b. Segurança
+
 - [ ] A aba Segurança abre e o botão de 2FA continua funcionando.
 
 ## 8. Limpeza

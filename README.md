@@ -35,6 +35,11 @@ com Tkinter e banco de dados MySQL.
   texto formatado, capa com legenda, bloco do autor, palavras-chave,
   leituras suplementares da mesma editoria e exportação em HTML (para
   imprimir/salvar em PDF pelo navegador).
+- **Gráficos & Análise** (tela inteira, gráficos do matplotlib embutidos): indicadores com
+  comparação com o período anterior, distribuição por editoria, evolução no período,
+  produtividade por autor, volume por dia da semana, pipeline redatorial, leitura automática
+  dos dados e meta do período. Filtros por período (inclusive personalizado), editoria,
+  jornalista e estado da matéria; exportação em PDF e CSV.
 - **Dados de teste**: `python seed.py` cria editorias, autores e matérias em todos os
   estados (com imagens) e roda uma verificação automática; o roteiro do que
   conferir na tela está em `ROTEIRO_DE_TESTE.md`.
@@ -66,6 +71,9 @@ News-Manager-main/
 │   ├── texto_rico.py                # Formatação do texto das matérias, estatísticas e exportação HTML
 │   ├── tela_editor.py               # Tela Nova Matéria: editor redacional completo
 │   ├── tela_leitura.py              # Tela de leitura da matéria (página inteira)
+│   ├── estatisticas.py              # Consultas e indicadores da tela de Gráficos (filtros, KPIs, séries)
+│   ├── graficos.py                  # Gráficos do matplotlib e relatório em PDF
+│   ├── tela_graficos.py             # Tela Gráficos & Análise
 │   ├── midia.py                     # Importação, redimensionamento e exibição das imagens
 │   ├── shell.py                     # Cabeçalho/masthead, navegação, área de abas e rodapé
 │   ├── auth.py                      # Hash de senha, 2FA por e-mail e login com Google

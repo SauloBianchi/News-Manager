@@ -18,8 +18,6 @@ import threading
 import tkinter as tk
 from tkinter import messagebox
 
-from matplotlib.figure import Figure
-from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 
 from .database import DatabaseManager
 from .logger import Logger
@@ -37,6 +35,7 @@ from .telas_cadastros import CategoriasFrame, AutoresFrame, _cabecalho
 from .tela_noticias import NoticiasFrame
 from .tela_editor import EditorFrame
 from .tela_leitura import LeituraFrame
+from .tela_graficos import GraficosFrame
 from .shell import Cabecalho, AreaAbas, Rodape
 
 
@@ -919,7 +918,7 @@ class MainWindow(tk.Tk):
             self.area, self.db, self.logger, ao_alterar=self._apos_alterar_cadastros)
         self.aba_autores = AutoresFrame(
             self.area, self.db, self.logger, ao_alterar=self._apos_alterar_cadastros)
-        self.aba_grafico = tk.Frame(self.area, bg=t.BG)
+        self.aba_graficos = GraficosFrame(self.area, self.db, self.logger)
         self.aba_seguranca = tk.Frame(self.area, bg=t.BG)
         # Telas "inteiras" que não aparecem na navegação: editor redacional e leitura
         self.aba_editor = EditorFrame(
@@ -935,12 +934,11 @@ class MainWindow(tk.Tk):
         self.area.adicionar("noticias", self.aba_noticias)
         self.area.adicionar("categorias", self.aba_categorias)
         self.area.adicionar("autores", self.aba_autores)
-        self.area.adicionar("graficos", self.aba_grafico)
+        self.area.adicionar("graficos", self.aba_graficos)
         self.area.adicionar("seguranca", self.aba_seguranca)
         self.area.adicionar("editor", self.aba_editor)
         self.area.adicionar("leitura", self.aba_leitura)
 
-        self._montar_aba_grafico()
         self._montar_aba_seguranca()
 
     # ---------- Navegação ----------
@@ -957,10 +955,8 @@ class MainWindow(tk.Tk):
             return
         self.area.mostrar(chave)
         self.cabecalho.definir_ativa(chave)
-        if chave in ("noticias", "categorias", "autores"):
+        if chave in ("noticias", "categorias", "autores", "graficos"):
             self.area.tela(chave).recarregar()
-        elif chave == "graficos":
-            self._desenhar_grafico()
 
     def abrir_editor(self, noticia_id=None, dados_iniciais=None):
         """Abre o editor redacional (matéria nova, existente ou com dados do editor rápido)."""
@@ -994,11 +990,8 @@ class MainWindow(tk.Tk):
         return bool(conexao and conexao.is_connected())
 
     def _apos_alterar_cadastros(self):
-        """Chamado quando uma notícia, categoria ou autor muda."""
-        try:
-            self._desenhar_grafico()
-        except Exception as e:
-            self.logger.error("Erro ao atualizar o gráfico", e)
+        """Chamado quando uma notícia, categoria ou autor muda. A tela de Gráficos
+        se atualiza sozinha ao ser aberta; aqui não há nada a redesenhar."""
 
     def _sair(self):
         """Encerra a sessão e volta para a tela de login."""
@@ -1008,42 +1001,6 @@ class MainWindow(tk.Tk):
         midia_global.limpar_cache()   # as imagens do Tk antigo não valem na próxima janela
         self.destroy()
         LoginWindow(self.db, self.logger).mainloop()
-
-    def _montar_aba_grafico(self):
-        _cabecalho(
-            self.aba_grafico, "Mesa de Análise", "Gráficos & Análise",
-            "Distribuição das matérias por editoria no acervo do jornal.",
-        )
-        barra = tk.Frame(self.aba_grafico, bg=t.BG)
-        barra.pack(fill="x", padx=28, pady=(14, 0))
-        t.botao_secundario(barra, "ATUALIZAR GRÁFICO", self._desenhar_grafico).pack(side="right")
-
-        self.figura = Figure(figsize=(6, 4), facecolor=t.BG)
-        self.canvas = FigureCanvasTkAgg(self.figura, master=self.aba_grafico)
-        self.canvas.get_tk_widget().configure(bg=t.BG, highlightthickness=0)
-        self.canvas.get_tk_widget().pack(fill="both", expand=True, padx=28, pady=14)
-        self._desenhar_grafico()
-
-    def _desenhar_grafico(self):
-        try:
-            dados = self.db.contar_noticias_por_categoria()
-            self.figura.clear()
-            ax = self.figura.add_subplot(111)
-            ax.set_facecolor(t.SURFACE)
-
-            categorias = [d["categoria"] for d in dados]
-            totais = [d["total"] for d in dados]
-
-            ax.bar(categorias, totais, color=t.PRIMARY)
-            ax.set_title("Notícias por Categoria", color=t.TEXT)
-            ax.set_ylabel("Quantidade", color=t.TEXT_MUTED)
-            ax.tick_params(colors=t.TEXT_MUTED)
-            for lado in ("top", "right"):
-                ax.spines[lado].set_visible(False)
-            self.figura.autofmt_xdate(rotation=30)
-            self.canvas.draw()
-        except Exception as e:
-            self.logger.error("Erro ao gerar gráfico", e)
 
     # ---------- Aba de Segurança (2FA) ----------
     def _montar_aba_seguranca(self):
