@@ -28,7 +28,7 @@ O seed nunca mexe no que **você** cadastrou. Se algum item da verificação apa
 ## 1. Cabeçalho e navegação
 
 - [ ] A data por extenso e o "Sistema redatorial ativo" aparecem no topo.
-- [ ] Os itens Notícias, Categorias, Autores, Gráficos e Segurança trocam de tela; o ativo fica vermelho com sublinhado.
+- [ ] Os itens Notícias, Categorias, Autores e Gráficos trocam de tela; o ativo fica vermelho com sublinhado.
 - [ ] Parar o MySQL com o sistema aberto muda o status para "Banco de dados desconectado" em até 30 s.
 - [ ] **Sair** pergunta, volta ao login, e ao entrar de novo **as imagens continuam aparecendo** (testa a correção do cache).
 - [ ] Redimensionar a janela até o mínimo não corta os botões do cabeçalho.
@@ -129,11 +129,41 @@ picos às terças e quartas, para os gráficos terem o que mostrar).
 - [ ] Redimensionar a janela: os gráficos acompanham a largura dos cartões e nada fica cortado.
 - [ ] Com o MySQL parado, a tela mostra o erro sem fechar o programa.
 
-## 7b. Segurança
+## 8. Notificações (sino do cabeçalho)
 
-- [ ] A aba Segurança abre e o botão de 2FA continua funcionando.
+Depois de rodar `python seed.py`, o painel já tem 8 despachos de exemplo (1 urgente, de várias idades).
 
-## 8. Limpeza
+- [ ] O envelope ✉ no cabeçalho mostra um **selo vermelho** com o número de não lidas ("99+" se passar de 99); o selo some quando não há nenhuma.
+- [ ] Clicar no envelope abre o painel pelo lado direito; ✕, Esc ou clicar de novo no envelope fecham.
+- [ ] Abas **Todas / Não lidas / Urgente** com contagens corretas; "Marcar lidas" zera as não lidas e o selo.
+- [ ] Cartões: tipo do despacho, etiqueta (a de furo aparece em vermelho), tempo ("HÁ 12 MIN", "HÁ 3 HORAS", "ONTEM ÀS 22:00", "22 MAI", com o ano se for de outro ano), título, texto e rodapé. Não lidas têm ponto vermelho; a urgente fica destacada.
+- [ ] Clicar num cartão marca como lido e **leva ao assunto**: matéria → leitura; editoria → Categorias; autor → Autores; aviso de segurança → Perfil.
+- [ ] Criar, publicar, enviar à revisão ou excluir uma matéria, e criar/editar/excluir editorias e autores, **gera novos despachos** (o selo sobe sozinho). Editar uma matéria sem mudar o estado dela não gera aviso.
+- [ ] Publicar uma matéria com a etiqueta `#Urgente` ou `#Furo` gera um "Furo de reportagem" urgente.
+- [ ] Com **Alertas sonoros** ligado no Perfil, um furo novo toca o sinal do sistema (uma vez por furo; não toca ao abrir o programa por causa de despachos antigos). Desligado, fica em silêncio.
+- [ ] "Ver histórico completo…" abre a lista com filtro e páginas; duplo clique abre o assunto.
+- [ ] "Configurar alertas do plantão" abre o Perfil.
+- [ ] Cada usuário tem o próprio "lido": entrar com outra conta mostra tudo como não lido para ela.
+
+## 9. Perfil (clicar no nome do usuário no cabeçalho)
+
+- [ ] O cabeçalho da tela mostra o prontuário (`NM-0001/ano`) e se a verificação em duas etapas está ativa.
+- [ ] **Crachá**: foto (ou a inicial), nome, cargo, matrícula, registro, conselho, mesa, nota biográfica, último fechamento e total de matérias do acervo.
+- [ ] **Trocar foto** e **Remover** funcionam (o arquivo antigo some de `midia/autores`); arquivo que não é imagem é recusado.
+- [ ] **Módulo 01**: editar os dados e "Salvar dados biográficos" atualiza o crachá, o nome no cabeçalho e o "Alterado por … em …". Nome vazio é recusado. O e-mail aparece bloqueado (🔒).
+- [ ] **Módulo 02**: as regras da senha nova mudam de ○ para ✓ enquanto você digita (12+ caracteres, símbolos, letras e números, diferente da atual, confirmação igual).
+- [ ] Trocar a senha: senha atual errada, nova fraca e confirmação diferente são recusadas com a mensagem certa; com tudo certo, os campos limpam, o login passa a aceitar só a senha nova e aparece o despacho "Senha Atualizada" (só para você).
+- [ ] Conta que entra só pelo Google: os campos de senha ficam desabilitados com uma explicação.
+- [ ] **Ativar 2FA** abre o assistente (código por e-mail); **Desativar 2FA** pede confirmação; ambos geram despacho de segurança e atualizam o selo do cabeçalho.
+- [ ] **Módulo 03** — preferências por usuário, salvas em "Preservar preferências do operador":
+  - [ ] *Alertas sonoros*: veja o item do painel de notificações.
+  - [ ] *Despachos por e-mail*: com o envio de e-mail configurado, um furo urgente chega por e-mail; sem configuração aparece o aviso em vermelho.
+  - [ ] *Revisão automática*: no editor, o texto ganha realce amarelo em espaços duplos, palavras repetidas, falta de espaço, frases iniciadas em minúscula e frases longas; o contador mostra "REVISÃO: N APONTAMENTO(S)" e, ao clicar nele, lista os problemas.
+  - [ ] *Polegadas de coluna*: no editor, o contador troca "caracteres" por "pol. de coluna" e a ficha de rotativa mostra as duas medidas.
+- [ ] Fechar e reabrir o programa mantém as preferências.
+- [ ] **Sair do sistema** (cartão lateral) volta ao login.
+
+## 10. Limpeza
 
 - [ ] `python seed.py --limpar` remove as matérias, autores, editorias e **imagens** do seed; o que você criou continua lá.
 - [ ] A pasta `midia/` não fica com arquivos soltos (rode `python seed.py --verificar` antes de limpar: ele avisa se houver imagens órfãs).

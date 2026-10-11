@@ -145,10 +145,13 @@ class NoticiaService(_ServicoBase):
             d["autor_id"] = int(dados.get("autor_id"))
         except (TypeError, ValueError):
             return d, "Escolha a seção editorial e o jornalista da matéria."
-        if not self.db.buscar_categoria_por_id(d["categoria_id"]):
+        categoria = self.db.buscar_categoria_por_id(d["categoria_id"])
+        if not categoria:
             return d, "A seção editorial escolhida não existe mais."
-        if not self.db.buscar_autor_por_id(d["autor_id"]):
+        autor = self.db.buscar_autor_por_id(d["autor_id"])
+        if not autor:
             return d, "O jornalista escolhido não existe mais."
+        d["_categoria"], d["_autor"] = categoria["nome"], autor["nome"]
 
         data_informada = dados.get("data")
         if data_informada in (None, ""):
@@ -265,6 +268,7 @@ class NoticiaService(_ServicoBase):
         except ErroBanco as e:
             return self._falha_banco("Erro ao criar notícia", e)
         self.logger.info(f"Notícia criada: {d['titulo']} (id {novo_id}, {d['status']})")
+        self._evento("evento_materia", novo_id, d["titulo"], d["status"], d["_categoria"], d["_autor"], d["etiquetas"])
         return Resultado(True, self._mensagem_sucesso(d, "criada"), novo_id)
 
     def atualizar(self, noticia_id: int, titulo: str, categoria_id, autor_id, conteudo: str = "",
@@ -294,6 +298,9 @@ class NoticiaService(_ServicoBase):
         for caminho in caminhos_de_imagens(atual.get("conteudo")) - caminhos_de_imagens(d["conteudo"]):
             self._descartar_imagem(caminho)
         self.logger.info(f"Notícia {noticia_id} atualizada: {d['titulo']} ({d['status']})")
+        if atual.get("status") != d["status"]:   # só avisa quando o estado da matéria muda
+            self._evento("evento_materia", noticia_id, d["titulo"], d["status"], d["_categoria"], d["_autor"],
+                         d["etiquetas"])
         return Resultado(True, self._mensagem_sucesso(d, "atualizada"), noticia_id)
 
     def excluir(self, noticia_id: int) -> Resultado:
@@ -308,6 +315,7 @@ class NoticiaService(_ServicoBase):
         for caminho in caminhos_de_imagens(noticia.get("conteudo")):
             self._descartar_imagem(caminho)
         self.logger.info(f"Notícia {noticia_id} excluída: {noticia['titulo']}")
+        self._evento("evento_materia_excluida", noticia["titulo"], noticia.get("categoria"))
         return Resultado(True, f"Matéria \"{noticia['titulo']}\" excluída.")
 
     def registrar_leitura(self, noticia_id: int) -> Resultado:

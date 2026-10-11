@@ -292,6 +292,41 @@ class EmailSender:
             ) from exc
 
 
+    @staticmethod
+    def enviar_despacho(destinatario: str, nome: str, titulo: str, mensagem: str):
+        """Envia um despacho urgente (furo de reportagem) em texto simples + HTML enxuto.
+        Usado pelas notificações para quem ligou 'Receber despachos de urgência por e-mail'."""
+        config = EmailSender._carregar_configuracao()
+        mensagem_email = EmailMessage()
+        remetente_nome = config.get("remetente_nome", "NewsManager")
+        mensagem_email["Subject"] = f"URGENTE: {titulo} — NewsManager"
+        mensagem_email["From"] = f"{remetente_nome} <{config['smtp_usuario']}>"
+        mensagem_email["To"] = destinatario
+        mensagem_email.set_content(
+            f"Olá, {nome or destinatario}!\n\nDESPACHO URGENTE\n{titulo}\n\n{mensagem}\n\n"
+            "Você recebe este aviso porque ativou os despachos de urgência por e-mail no seu Perfil."
+        )
+        import html as _html
+        mensagem_email.add_alternative(
+            f"<div style=\"font-family:Georgia,serif;color:{_COR_TEXTO};max-width:560px\">"
+            f"<p style=\"font:bold 11px Arial;letter-spacing:.1em;color:{_COR_PRIMARIA}\">DESPACHO URGENTE</p>"
+            f"<h2 style=\"margin:4px 0\">{_html.escape(titulo)}</h2>"
+            f"<p style=\"color:{_COR_TEXTO_SECUNDARIO}\">{_html.escape(mensagem)}</p>"
+            f"<hr style=\"border:0;border-top:1px solid {_COR_BORDA}\">"
+            f"<p style=\"font:11px Arial;color:{_COR_TEXTO_SECUNDARIO}\">Você recebe este aviso porque ativou os "
+            "despachos de urgência por e-mail no seu Perfil do NewsManager.</p></div>", subtype="html")
+        try:
+            contexto = ssl.create_default_context()
+            with smtplib.SMTP(config["smtp_host"], int(config["smtp_porta"]), timeout=15) as servidor:
+                servidor.starttls(context=contexto)
+                servidor.login(config["smtp_usuario"], config["smtp_senha"])
+                servidor.send_message(mensagem_email)
+        except smtplib.SMTPException as exc:
+            raise RuntimeError(f"Falha ao enviar o despacho: {exc}") from exc
+        except OSError as exc:
+            raise RuntimeError(f"Não foi possível conectar ao servidor de e-mail: {exc}") from exc
+
+
 # ---------------------------------------------------------------------------
 # Login social com Google (OAuth 2.0 - fluxo "Aplicativo instalado")
 # ---------------------------------------------------------------------------

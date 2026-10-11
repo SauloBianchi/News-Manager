@@ -25,7 +25,20 @@ CREATE TABLE IF NOT EXISTS usuarios (
     codigo_verificacao VARCHAR(255) NULL,  -- hash SHA-256 do código de 6 dígitos (nunca texto puro)
     codigo_expira_em DATETIME NULL,        -- validade do código acima (10 min)
     criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    ultimo_login TIMESTAMP NULL
+    ultimo_login TIMESTAMP NULL,
+    -- perfil do usuário (tela Perfil)
+    byline VARCHAR(150) NULL,
+    telefone VARCHAR(60) NULL,
+    atribuicao TEXT NULL,
+    cargo VARCHAR(120) NULL,
+    matricula VARCHAR(40) NULL,
+    registro VARCHAR(40) NULL,
+    conselho VARCHAR(120) NULL,
+    mesa VARCHAR(120) NULL,
+    nota_biografica TEXT NULL,
+    foto VARCHAR(255) NULL,
+    atualizado_em DATETIME NULL,
+    atualizado_por VARCHAR(150) NULL
 );
 
 CREATE TABLE IF NOT EXISTS categorias (
@@ -83,3 +96,33 @@ INSERT INTO autores (nome, email, funcao) VALUES ('Ernesto', 'ernesto@example.co
                                                  ('Gabriel S', 'gabriel@example.com', 'reporter'),
                                                  ('Saulo', 'saulo@example.com', 'reporter')
   ON DUPLICATE KEY UPDATE nome = nome;
+
+-- Despachos & notificações (painel do sino) e preferências por usuário
+CREATE TABLE IF NOT EXISTS notificacoes (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    tipo VARCHAR(30) NOT NULL,                         -- furo | publicacao | revisao | pauta | estrutura | arquivo | seguranca
+    titulo VARCHAR(200) NOT NULL,
+    mensagem VARCHAR(600) NULL,
+    etiqueta VARCHAR(80) NULL,
+    rodape VARCHAR(160) NULL,
+    urgente TINYINT(1) NOT NULL DEFAULT 0,
+    alvo_tipo VARCHAR(20) NULL,                        -- noticia | categoria | autor | perfil
+    alvo_id INT NULL,
+    usuario_destino INT NULL,                          -- NULL = todos; senão, só esse usuário
+    ator VARCHAR(150) NULL,
+    criado_em DATETIME NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS notificacoes_lidas (
+    usuario_id INT NOT NULL,
+    notificacao_id INT NOT NULL,
+    lida_em DATETIME NOT NULL,
+    PRIMARY KEY (usuario_id, notificacao_id)
+);
+
+CREATE TABLE IF NOT EXISTS preferencias_usuario (
+    usuario_id INT NOT NULL,
+    chave VARCHAR(60) NOT NULL,
+    valor VARCHAR(255) NOT NULL,
+    PRIMARY KEY (usuario_id, chave)
+);

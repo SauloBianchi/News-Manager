@@ -98,6 +98,14 @@ class _ServicoBase:
             return   # na dúvida, não apaga
         self.midia.remover(caminho)
 
+    def _evento(self, funcao, *args, **kwargs):
+        """Registra uma notificação (app/notificacoes.py) sem nunca atrapalhar a operação principal."""
+        try:
+            from . import notificacoes
+            getattr(notificacoes, funcao)(self.db, self.logger, *args, **kwargs)
+        except Exception as erro:
+            self.logger.error("Erro ao registrar notificação", erro)
+
     def descartar_imagem_orfa(self, caminho):
         """Uso pelas telas: remove uma imagem provisória que não foi para nenhum registro."""
         self._descartar_imagem(caminho)
@@ -188,6 +196,7 @@ class CategoriaService(_ServicoBase):
         except ErroBanco as e:
             return self._falha_banco("Erro ao criar categoria", e)
         self.logger.info(f"Categoria criada: {nome} (id {novo_id})")
+        self._evento("evento_estrutura", "criada", "categoria", nome, "categoria", novo_id)
         return Resultado(True, f"Editoria \"{nome}\" cadastrada.", novo_id)
 
     def atualizar(self, categoria_id: int, nome: str, descricao: str,
@@ -202,6 +211,7 @@ class CategoriaService(_ServicoBase):
         except ErroBanco as e:
             return self._falha_banco("Erro ao atualizar categoria", e)
         self.logger.info(f"Categoria {categoria_id} atualizada: {nome}")
+        self._evento("evento_estrutura", "atualizada", "categoria", nome, "categoria", categoria_id)
         return Resultado(True, f"Editoria \"{nome}\" atualizada.", categoria_id)
 
     def excluir(self, categoria_id: int) -> Resultado:
@@ -221,6 +231,7 @@ class CategoriaService(_ServicoBase):
         except ErroBanco as e:
             return self._falha_banco("Erro ao excluir categoria", e)
         self.logger.info(f"Categoria {categoria_id} excluída: {categoria['nome']}")
+        self._evento("evento_estrutura", "excluida", "categoria", categoria["nome"])
         return Resultado(True, f"Editoria \"{categoria['nome']}\" excluída.")
 
 
@@ -320,6 +331,7 @@ class AutorService(_ServicoBase):
         except ErroBanco as e:
             return self._falha_banco("Erro ao criar autor", e)
         self.logger.info(f"Autor criado: {d['nome']} (id {novo_id})")
+        self._evento("evento_estrutura", "criada", "autor", d["nome"], "autor", novo_id)
         return Resultado(True, f"Credencial de \"{d['nome']}\" registrada.", novo_id)
 
     def atualizar(self, autor_id: int, nome: str, email: str = "", funcao: str = "reporter",
@@ -341,6 +353,7 @@ class AutorService(_ServicoBase):
         if atual.get("foto") != d["foto"]:
             self._descartar_imagem(atual.get("foto"))   # a foto antiga deixou de ser usada
         self.logger.info(f"Autor {autor_id} atualizado: {d['nome']}")
+        self._evento("evento_estrutura", "atualizada", "autor", d["nome"], "autor", autor_id)
         return Resultado(True, f"Credencial de \"{d['nome']}\" atualizada.", autor_id)
 
     def excluir(self, autor_id: int) -> Resultado:
@@ -361,4 +374,5 @@ class AutorService(_ServicoBase):
             return self._falha_banco("Erro ao excluir autor", e)
         self._descartar_imagem(autor.get("foto"))
         self.logger.info(f"Autor {autor_id} excluído: {autor['nome']}")
+        self._evento("evento_estrutura", "excluida", "autor", autor["nome"])
         return Resultado(True, f"Jornalista \"{autor['nome']}\" excluído.")

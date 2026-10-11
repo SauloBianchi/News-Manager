@@ -34,6 +34,7 @@ from . import theme as t
 from .midia import RAIZ_PROJETO, TIPOS_ARQUIVO_DIALOGO, ErroMidia
 from .midia import midia as midia_global
 from .noticias import FORMATO_DATA_TELA, STATUS_NOTICIA, NoticiaService, interpretar_data
+from .notificacoes import Sessao
 from .telas_cadastros import (
     MARGEM,
     PAINEL,
@@ -53,8 +54,10 @@ from .texto_rico import (
     indice_flesch,
     inserir_linha,
     inserir_link,
+    polegadas_de_coluna,
     prefixar_linhas,
     realces_inline,
+    revisar_texto,
     tempo_leitura_texto,
     texto_simples,
     url_segura,
@@ -126,6 +129,7 @@ class EditorFrame(_TelaBase):
         self._etiquetas = []
         self._tique = 0
         self._after_digitar = None
+        self._apontamentos = []          # problemas de redação (preferência "revisão automática")
 
         self.var_titulo = tk.StringVar()
         self.var_subtitulo = tk.StringVar()
@@ -241,6 +245,7 @@ class EditorFrame(_TelaBase):
         self.rotulo_contadores = tk.Label(barra, text="", fg=t.PRIMARY, bg=PAINEL, anchor="w",
                                           font=t.Fontes.corpo(8, "bold"), padx=10, pady=4)
         self.rotulo_contadores.pack(fill="x")
+        self.rotulo_contadores.bind("<Button-1>", lambda e: self._mostrar_apontamentos())
 
     def _montar_texto(self, pai):
         quadro = tk.Frame(pai, bg=t.SURFACE, highlightthickness=1, highlightbackground=t.BORDER)
@@ -261,6 +266,7 @@ class EditorFrame(_TelaBase):
         x.tag_configure("md_citacao", font=f.display(13, "normal", True), foreground=t.TEXT_MUTED,
                         lmargin1=16, lmargin2=16, background=PAINEL_BAIXO)
         x.tag_configure("md_marcador", foreground=COR_MARCADOR)
+        x.tag_configure("md_revisao", background="#FFE9A8")
         x.bind("<KeyRelease>", lambda e: self._corpo_mudou())
         x.bind("<Control-b>", lambda e: self._atalho(lambda: self._acao_envolver("**")))
         x.bind("<Control-i>", lambda e: self._atalho(lambda: self._acao_envolver("*")))
@@ -562,7 +568,8 @@ class EditorFrame(_TelaBase):
     def _atualizar_estado(self):
         corpo = self._corpo()
         form = self._form_dict()
-        chave = (corpo, form["titulo"], form["data"], form["status"], self._snap_salvo is None)
+        chave = (corpo, form["titulo"], form["data"], form["status"], self._snap_salvo is None,
+                 Sessao.ativa("polegadas_coluna"))
         simples = texto_simples(corpo)
         palavras = contar_palavras(simples)
 
@@ -572,13 +579,21 @@ class EditorFrame(_TelaBase):
             fg=t.ERROR if tamanho > TITULO_RECOMENDADO else t.TEXT_MUTED)
         def milhar(numero):
             return f"{numero:,}".replace(",", ".")
+        medida = (polegadas_de_coluna(palavras).upper() + " DE COLUNA" if Sessao.ativa("polegadas_coluna")
+                  else f"{milhar(len(corpo))} CARACTERES")
+        revisao = ""
+        if Sessao.ativa("revisao_automatica"):
+            n = len(self._apontamentos)
+            revisao = f"  •  REVISÃO: {n} APONTAMENTO(S)" + (" (CLIQUE PARA VER)" if n else " ✓")
         self.rotulo_contadores.configure(
-            text=f"{milhar(palavras)} PALAVRAS  •  {milhar(len(corpo))} CARACTERES  •  "
-                 f"~{colunas_estimadas(palavras).upper()} FÍSICAS")
+            text=f"{milhar(palavras)} PALAVRAS  •  {medida}  •  "
+                 f"~{colunas_estimadas(palavras).upper()} FÍSICAS{revisao}")
         if chave != self._ultimo_estado:   # a ficha é a parte mais "cara": só recalcula se mudou
             self._ultimo_estado = chave
             flesch = indice_flesch(simples)
-            self.valores_ficha["colunas"].configure(text=colunas_estimadas(palavras))
+            colunas = colunas_estimadas(palavras)
+            self.valores_ficha["colunas"].configure(
+                text=f"{colunas} ({polegadas_de_coluna(palavras)})" if Sessao.ativa("polegadas_coluna") else colunas)
             self.valores_ficha["flesch"].configure(
                 text="—" if flesch is None else f"{flesch}/100 ({classificar_flesch(flesch)})")
             self.valores_ficha["leitura"].configure(text=tempo_leitura_texto(palavras))
@@ -615,7 +630,7 @@ class EditorFrame(_TelaBase):
     def _realcar(self):
         x = self.texto
         for tag in ("md_negrito", "md_italico", "md_sublinhado", "md_link", "md_h2", "md_h3",
-                    "md_citacao", "md_marcador"):
+                    "md_citacao", "md_marcador", "md_revisao"):
             x.tag_remove(tag, "1.0", "end")
         for numero, linha in enumerate(self._corpo().split("\n"), start=1):
             if linha.startswith("### "):
@@ -633,6 +648,22 @@ class EditorFrame(_TelaBase):
             for ini, fim in marcadores:
                 x.tag_add("md_marcador", f"{numero}.{ini}", f"{numero}.{fim}")
         x.tag_raise("md_marcador")
+        self._apontamentos = revisar_texto(self._corpo()) if Sessao.ativa("revisao_automatica") else []
+        for a in self._apontamentos:
+            x.tag_add("md_revisao", f"{a['linha']}.{a['inicio']}", f"{a['linha']}.{a['fim']}")
+        x.tag_lower("md_revisao")
+
+    def _mostrar_apontamentos(self):
+        """Lista os problemas encontrados pela revisão automática (clique no contador)."""
+        if not Sessao.ativa("revisao_automatica") or not self._apontamentos:
+            return
+        linhas = self._corpo().split("\n")
+        itens = []
+        for a in self._apontamentos[:15]:
+            trecho = linhas[a["linha"] - 1][a["inicio"]:a["fim"]].strip() or "…"
+            itens.append(f"Linha {a['linha']}: {a['mensagem']}  →  “{trecho[:40]}”")
+        extra = f"\n… e mais {len(self._apontamentos) - 15}." if len(self._apontamentos) > 15 else ""
+        messagebox.showinfo("Revisão automática", "\n".join(itens) + extra)
 
     # =====================================================================
     # Barra de ferramentas

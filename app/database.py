@@ -4,6 +4,8 @@ Classe responsável pela conexão com o MySQL e pelas operações
 CRUD (Create, Read, Update, Delete) do sistema NewsManager.
 """
 
+from datetime import datetime
+
 import mysql.connector
 from mysql.connector import Error
 from .logger import Logger
@@ -118,12 +120,43 @@ class DatabaseManager:
         )
         return str(resultado[0]["tipo"]).lower() if resultado else None
 
+    # Tabelas criadas automaticamente em bancos antigos (CREATE TABLE IF NOT EXISTS)
+    _TABELAS_EXTRAS = (
+        """CREATE TABLE IF NOT EXISTS notificacoes (
+               id INT AUTO_INCREMENT PRIMARY KEY,
+               tipo VARCHAR(30) NOT NULL,
+               titulo VARCHAR(200) NOT NULL,
+               mensagem VARCHAR(600) NULL,
+               etiqueta VARCHAR(80) NULL,
+               rodape VARCHAR(160) NULL,
+               urgente TINYINT(1) NOT NULL DEFAULT 0,
+               alvo_tipo VARCHAR(20) NULL,
+               alvo_id INT NULL,
+               usuario_destino INT NULL,
+               ator VARCHAR(150) NULL,
+               criado_em DATETIME NOT NULL
+           )""",
+        """CREATE TABLE IF NOT EXISTS notificacoes_lidas (
+               usuario_id INT NOT NULL,
+               notificacao_id INT NOT NULL,
+               lida_em DATETIME NOT NULL,
+               PRIMARY KEY (usuario_id, notificacao_id)
+           )""",
+        """CREATE TABLE IF NOT EXISTS preferencias_usuario (
+               usuario_id INT NOT NULL,
+               chave VARCHAR(60) NOT NULL,
+               valor VARCHAR(255) NOT NULL,
+               PRIMARY KEY (usuario_id, chave)
+           )""",
+    )
+
     def garantir_esquema(self):
         """Atualiza bancos criados com a versão antiga do schema.sql: adiciona
         as colunas usadas pelas telas de Categorias e Autores (descricao, cor,
         status, bio, funcao, cargo, registro) e de Notícias (subtitulo, status,
-        destaque, etiquetas, leituras, imagem, imagem_legenda, imagem_credito) e a
-        foto dos autores se ainda não existirem. Roda a cada
+        destaque, etiquetas, leituras, imagem, imagem_legenda, imagem_credito), a
+        foto dos autores e o perfil do usuário, e cria as tabelas de notificações
+        e de preferências, se ainda não existirem. Roda a cada
         conexão, mas só altera a tabela na primeira vez."""
         novas_colunas = [
             ("categorias", "descricao", "VARCHAR(255) NULL"),
@@ -143,7 +176,22 @@ class DatabaseManager:
             ("noticias", "imagem_legenda", "VARCHAR(255) NULL"),
             ("noticias", "imagem_credito", "VARCHAR(120) NULL"),
             ("autores", "foto", "VARCHAR(255) NULL"),
+            # perfil do usuário (tela Perfil)
+            ("usuarios", "byline", "VARCHAR(150) NULL"),
+            ("usuarios", "telefone", "VARCHAR(60) NULL"),
+            ("usuarios", "atribuicao", "TEXT NULL"),
+            ("usuarios", "cargo", "VARCHAR(120) NULL"),
+            ("usuarios", "matricula", "VARCHAR(40) NULL"),
+            ("usuarios", "registro", "VARCHAR(40) NULL"),
+            ("usuarios", "conselho", "VARCHAR(120) NULL"),
+            ("usuarios", "mesa", "VARCHAR(120) NULL"),
+            ("usuarios", "nota_biografica", "TEXT NULL"),
+            ("usuarios", "foto", "VARCHAR(255) NULL"),
+            ("usuarios", "atualizado_em", "DATETIME NULL"),
+            ("usuarios", "atualizado_por", "VARCHAR(150) NULL"),
         ]
+        for ddl in self._TABELAS_EXTRAS:
+            self._executar(ddl, commit=True)
         for tabela, coluna, definicao in novas_colunas:
             if not self._coluna_existe(tabela, coluna):
                 self._executar(f"ALTER TABLE {tabela} ADD COLUMN {coluna} {definicao}", commit=True)
@@ -430,8 +478,10 @@ class DatabaseManager:
             """SELECT 1 AS usado FROM noticias WHERE imagem = %s OR conteudo LIKE %s
                UNION
                SELECT 1 AS usado FROM autores WHERE foto = %s
+               UNION
+               SELECT 1 AS usado FROM usuarios WHERE foto = %s
                LIMIT 1""",
-            (caminho, _padrao_like(caminho), caminho), fetch=True,
+            (caminho, _padrao_like(caminho), caminho, caminho), fetch=True,
         )
         return bool(linhas)
 
@@ -558,6 +608,146 @@ class DatabaseManager:
             "SELECT MAX(data_publicacao) AS ultima FROM noticias "
             "WHERE status = 'publicado' AND data_publicacao <= %s", (ate,), fetch=True)
         return linhas[0]["ultima"]
+
+    # ---------- Notificações ----------
+    # `usuario_id` define o que é "lida" para cada pessoa e quais avisos pessoais
+    # (usuario_destino) ela vê. Todos lançam ErroBanco em caso de falha.
+    @staticmethod
+    def _filtro_notificacoes(filtro):
+        base = "(n.usuario_destino IS NULL OR n.usuario_destino = %s)"
+        if filtro == "nao_lidas":
+            return base + " AND l.notificacao_id IS NULL"
+        if filtro == "urgentes":
+            return base + " AND n.urgente = 1"
+        return base
+
+    def criar_notificacao(self, tipo, titulo, mensagem=None, etiqueta=None, rodape=None, urgente=False,
+                          alvo_tipo=None, alvo_id=None, usuario_destino=None, ator=None, criado_em=None):
+        r = self._rodar(
+            """INSERT INTO notificacoes (tipo, titulo, mensagem, etiqueta, rodape, urgente, alvo_tipo,
+                                         alvo_id, usuario_destino, ator, criado_em)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+            (tipo, titulo, mensagem, etiqueta, rodape, 1 if urgente else 0, alvo_tipo, alvo_id,
+             usuario_destino, ator, criado_em or datetime.now().replace(microsecond=0)),
+            commit=True,
+        )
+        return r["id"]
+
+    def listar_notificacoes(self, usuario_id, filtro="todas", limite=20, deslocamento=0):
+        return self._rodar(
+            f"""SELECT n.id, n.tipo, n.titulo, n.mensagem, n.etiqueta, n.rodape, n.urgente, n.alvo_tipo,
+                       n.alvo_id, n.ator, n.criado_em,
+                       (CASE WHEN l.notificacao_id IS NULL THEN 0 ELSE 1 END) AS lida
+                FROM notificacoes n
+                LEFT JOIN notificacoes_lidas l ON l.notificacao_id = n.id AND l.usuario_id = %s
+                WHERE {self._filtro_notificacoes(filtro)}
+                ORDER BY n.criado_em DESC, n.id DESC
+                LIMIT %s OFFSET %s""",
+            (usuario_id, usuario_id, int(limite), int(deslocamento)), fetch=True,
+        )
+
+    def contar_notificacoes(self, usuario_id, filtro="todas") -> int:
+        linhas = self._rodar(
+            f"""SELECT COUNT(*) AS total
+                FROM notificacoes n
+                LEFT JOIN notificacoes_lidas l ON l.notificacao_id = n.id AND l.usuario_id = %s
+                WHERE {self._filtro_notificacoes(filtro)}""",
+            (usuario_id, usuario_id), fetch=True,
+        )
+        return int(linhas[0]["total"])
+
+    def buscar_notificacao(self, notificacao_id):
+        linhas = self._rodar("SELECT * FROM notificacoes WHERE id = %s", (notificacao_id,), fetch=True)
+        return linhas[0] if linhas else None
+
+    def marcar_notificacao_lida(self, usuario_id, notificacao_id):
+        existe = self._rodar(
+            "SELECT 1 AS ok FROM notificacoes_lidas WHERE usuario_id = %s AND notificacao_id = %s",
+            (usuario_id, notificacao_id), fetch=True)
+        if not existe:
+            self._rodar(
+                "INSERT INTO notificacoes_lidas (usuario_id, notificacao_id, lida_em) VALUES (%s, %s, %s)",
+                (usuario_id, notificacao_id, datetime.now().replace(microsecond=0)), commit=True)
+
+    def marcar_todas_notificacoes_lidas(self, usuario_id):
+        self._rodar(
+            """INSERT INTO notificacoes_lidas (usuario_id, notificacao_id, lida_em)
+               SELECT %s, n.id, %s
+               FROM notificacoes n
+               LEFT JOIN notificacoes_lidas l ON l.notificacao_id = n.id AND l.usuario_id = %s
+               WHERE l.notificacao_id IS NULL AND (n.usuario_destino IS NULL OR n.usuario_destino = %s)""",
+            (usuario_id, datetime.now().replace(microsecond=0), usuario_id, usuario_id), commit=True)
+
+    def ultima_notificacao_urgente_nao_lida(self, usuario_id):
+        """id da notificação urgente não lida mais recente (None se não houver)."""
+        linhas = self._rodar(
+            f"""SELECT MAX(n.id) AS id
+                FROM notificacoes n
+                LEFT JOIN notificacoes_lidas l ON l.notificacao_id = n.id AND l.usuario_id = %s
+                WHERE {self._filtro_notificacoes("nao_lidas")} AND n.urgente = 1""",
+            (usuario_id, usuario_id), fetch=True)
+        return linhas[0]["id"]
+
+    def purgar_notificacoes(self, antes):
+        """Apaga notificações mais antigas que `antes` (e as marcações de leitura delas)."""
+        self._rodar("DELETE FROM notificacoes_lidas WHERE notificacao_id IN "
+                    "(SELECT id FROM notificacoes WHERE criado_em < %s)", (antes,), commit=True)
+        self._rodar("DELETE FROM notificacoes WHERE criado_em < %s", (antes,), commit=True)
+
+    def excluir_notificacoes_do_ator(self, ator):
+        """Remove as notificações criadas por um ator (usado pelo seed.py)."""
+        self._rodar("DELETE FROM notificacoes_lidas WHERE notificacao_id IN "
+                    "(SELECT id FROM notificacoes WHERE ator = %s)", (ator,), commit=True)
+        self._rodar("DELETE FROM notificacoes WHERE ator = %s", (ator,), commit=True)
+
+    # ---------- Perfil e preferências do usuário ----------
+    CAMPOS_PERFIL = ("nome", "byline", "telefone", "atribuicao", "cargo", "matricula", "registro",
+                     "conselho", "mesa", "nota_biografica", "foto")
+
+    def buscar_perfil_usuario(self, usuario_id):
+        linhas = self._rodar(
+            """SELECT id, nome, usuario, email, dois_fatores_ativo, criado_em, ultimo_login,
+                      (CASE WHEN senha_hash IS NULL THEN 0 ELSE 1 END) AS tem_senha,
+                      (CASE WHEN google_id IS NULL THEN 0 ELSE 1 END) AS tem_google,
+                      byline, telefone, atribuicao, cargo, matricula, registro, conselho, mesa,
+                      nota_biografica, foto, atualizado_em, atualizado_por
+               FROM usuarios WHERE id = %s""",
+            (usuario_id,), fetch=True)
+        return linhas[0] if linhas else None
+
+    def atualizar_perfil_usuario(self, usuario_id, campos: dict, atualizado_por=None):
+        """Grava só os campos permitidos de CAMPOS_PERFIL e registra quem alterou e quando."""
+        nomes = [c for c in self.CAMPOS_PERFIL if c in campos]
+        if not nomes:
+            return
+        atribuicoes = ", ".join(f"{c} = %s" for c in nomes) + ", atualizado_em = %s, atualizado_por = %s"
+        valores = [campos[c] for c in nomes] + [datetime.now().replace(microsecond=0), atualizado_por, usuario_id]
+        self._rodar(f"UPDATE usuarios SET {atribuicoes} WHERE id = %s", tuple(valores), commit=True)
+
+    def trocar_senha_usuario(self, usuario_id, senha_hash):
+        self._rodar(
+            """UPDATE usuarios SET senha_hash = %s, codigo_verificacao = NULL, codigo_expira_em = NULL,
+                      atualizado_em = %s WHERE id = %s""",
+            (senha_hash, datetime.now().replace(microsecond=0), usuario_id), commit=True)
+
+    def obter_preferencias(self, usuario_id) -> dict:
+        linhas = self._rodar("SELECT chave, valor FROM preferencias_usuario WHERE usuario_id = %s",
+                             (usuario_id,), fetch=True)
+        return {l["chave"]: l["valor"] for l in linhas}
+
+    def salvar_preferencias(self, usuario_id, valores: dict):
+        for chave, valor in valores.items():
+            self._rodar("DELETE FROM preferencias_usuario WHERE usuario_id = %s AND chave = %s",
+                        (usuario_id, chave), commit=True)
+            self._rodar("INSERT INTO preferencias_usuario (usuario_id, chave, valor) VALUES (%s, %s, %s)",
+                        (usuario_id, chave, str(valor)), commit=True)
+
+    def listar_usuarios_com_preferencia(self, chave, valor="1"):
+        """Usuários (id, nome, email) que ligaram uma preferência (ex.: e-mail de urgência)."""
+        return self._rodar(
+            """SELECT u.id, u.nome, u.email FROM usuarios u
+               JOIN preferencias_usuario p ON p.usuario_id = u.id AND p.chave = %s AND p.valor = %s""",
+            (chave, str(valor)), fetch=True)
 
     def somar_leituras(self) -> int:
         linhas = self._rodar("SELECT COALESCE(SUM(leituras), 0) AS total FROM noticias", fetch=True)

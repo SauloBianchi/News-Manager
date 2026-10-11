@@ -50,6 +50,8 @@ from app.logger import Logger  # noqa: E402
 from app.midia import ErroMidia, disponivel as pillow_disponivel  # noqa: E402
 from app.midia import midia as gerenciador_midia  # noqa: E402
 from app.noticias import NoticiaService  # noqa: E402
+from app.notificacoes import NotificacaoService, silenciar, tempo_relativo  # noqa: E402
+from app.perfil import PerfilService, avaliar_senha  # noqa: E402
 from app.texto_rico import (  # noqa: E402
     blocos,
     caminhos_de_imagens,
@@ -65,6 +67,7 @@ from app.texto_rico import (  # noqa: E402
 DOMINIO_EMAIL = "seed.newsmanager.local"
 CATEGORIAS_DO_SCHEMA = {"Política", "Esportes", "Tecnologia", "Economia"}   # vêm do schema.sql: nunca removidas
 MARCA_AUTOSAVE = "Rascunho recuperável (exemplo do seed)"
+ATOR_SEED = "seed.py"          # marca as notificações criadas por este script (para o --limpar)
 PREFIXO_VOLUME = "Volume #"
 
 # ---------------------------------------------------------------------------
@@ -373,7 +376,7 @@ def importar(caminho: Path, pasta: str):
 # ---------------------------------------------------------------------------
 # Popular
 # ---------------------------------------------------------------------------
-def popular(db, logger, com_imagens=True, autosave=False, volume=0):
+def _popular_sem_notificacoes(db, logger, com_imagens=True, autosave=False, volume=0):
     cs = CategoriaService(db, logger)
     au = AutorService(db, logger, gerenciador_midia)
     ns = NoticiaService(db, logger, gerenciador_midia)
@@ -474,6 +477,62 @@ def popular(db, logger, com_imagens=True, autosave=False, volume=0):
     return criadas
 
 
+def popular(db, logger, com_imagens=True, autosave=False, volume=0):
+    """Cria os dados de teste. As notificações automáticas ficam silenciadas durante a carga (seriam
+    centenas) e, no fim, entra um conjunto escolhido de despachos de exemplo."""
+    with silenciar():
+        criadas = _popular_sem_notificacoes(db, logger, com_imagens, autosave, volume)
+    criadas["notificacoes"] = popular_notificacoes(db, logger)
+    return criadas
+
+
+# ---------------------------------------------------------------------------
+# Notificações de exemplo (painel do sino)
+# ---------------------------------------------------------------------------
+def popular_notificacoes(db, logger):
+    """Despachos variados (urgente, publicação, estrutura, revisão, arquivo, pauta, antigos)."""
+    agora = datetime.now().replace(microsecond=0)
+    manchete = id_por(db, "noticias", "titulo", "Reforma Tributária e os Novos Desafios Estruturais para o Varejo Nacional")
+    ia = id_por(db, "noticias", "titulo", "Avanços em Inteligência Artificial Redefinem a Produção de Notícias")
+    cat_tec = id_por(db, "categorias", "nome", "Tecnologia & Ciência")
+    ontem = (agora - timedelta(days=1)).replace(hour=22, minute=0)
+    exemplos = [
+        ("furo", "Plantão do Telégrafo: Coletiva do Banco Central",
+         "Correspondência de Brasília: coletiva extraordinária do Banco Central convocada para as 16h30 sobre política cambial.",
+         "Telégrafo", "URGENTE • PRIORIDADE ZERO", True, "noticia", manchete, agora - timedelta(hours=1)),
+        ("publicacao", "Reforma Tributária e Impactos nos Serviços",
+         "A peça de Carlos Eduardo Silva acabou de ser carimbada para circulação digital com aprovação da editoria de economia.",
+         "Economia", "AUTOR: CARLOS EDUARDO SILVA", False, "noticia", manchete, agora - timedelta(minutes=12)),
+        ("estrutura", "Categoria Atualizada no Mastro",
+         "A editoria Tecnologia & Ciência teve sua taxonomia revisada pelo Editor-Chefe.",
+         None, "DESPACHO DA CHEFIA", False, "categoria", cat_tec, agora - timedelta(minutes=45)),
+        ("revisao", "Revisão Ortográfica Concluída",
+         "A copydesk revisou o texto integral de “Avanços em Inteligência Artificial” sem pendências terminológicas.",
+         None, "LIBERAÇÃO CONCEDIDA", False, "noticia", ia, agora - timedelta(hours=3)),
+        ("arquivo", "Backup do Acervo Histórico Finalizado",
+         "O espelhamento das edições encadernadas de 1850 a 1980 foi validado no cofre digital de segurança redundante.",
+         "Arquivo central", "ARQUIVO & MEMÓRIA", False, None, None, ontem),
+        ("pauta", "Pauta: cobertura especial das eleições europeias",
+         "Nova pauta aberta na editoria de Mundo & Diplomacia, sob responsabilidade de Gabriel Esteves.",
+         "Mundo & Diplomacia", "FILA DE APURAÇÃO", False, None, None, agora - timedelta(days=3)),
+        ("publicacao", "Seleção feminina estreia com vitória nas eliminatórias",
+         "A peça de Sofia Ramalho foi carimbada para circulação digital na editoria de Esportes & Lazer.",
+         "Esportes & Lazer", "AUTOR: SOFIA RAMALHO", False, None, None, agora - timedelta(days=9)),
+        ("arquivo", "Matéria Removida do Acervo",
+         "A matéria “Crônica de teste do ano passado” foi excluída pela chefia há mais de um ano (exemplo de data antiga).",
+         None, "ARQUIVO & MEMÓRIA", False, None, None, agora - timedelta(days=400)),
+    ]
+    criadas = 0
+    for tipo, titulo, mensagem, etiqueta, rodape, urgente, alvo_tipo, alvo_id, quando in exemplos:
+        if db._rodar("SELECT id FROM notificacoes WHERE titulo = %s AND ator = %s LIMIT 1", (titulo, ATOR_SEED), fetch=True):
+            continue
+        db.criar_notificacao(tipo, titulo, mensagem, etiqueta, rodape, urgente,
+                             alvo_tipo if alvo_id else None, alvo_id, None, ATOR_SEED, quando)
+        criadas += 1
+    print(f"Notificações de exemplo: {criadas} criadas (autor da ação: {ATOR_SEED}).")
+    return criadas
+
+
 # ---------------------------------------------------------------------------
 # Volume: matérias extras para os gráficos
 # ---------------------------------------------------------------------------
@@ -537,6 +596,13 @@ def popular_volume(db, logger, quantidade):
 # Limpar (só o que o seed criou)
 # ---------------------------------------------------------------------------
 def limpar(db, logger):
+    with silenciar():     # apagar não deve gerar centenas de "matéria removida"
+        removidos = _limpar(db, logger)
+    db.excluir_notificacoes_do_ator(ATOR_SEED)
+    return removidos
+
+
+def _limpar(db, logger):
     cs = CategoriaService(db, logger)
     au = AutorService(db, logger, gerenciador_midia)
     ns = NoticiaService(db, logger, gerenciador_midia)
@@ -601,6 +667,11 @@ def _arquivos_de_midia():
 
 
 def verificar(db, logger):
+    with silenciar():     # as verificações criam e apagam itens temporários: sem notificações
+        return _verificar(db, logger)
+
+
+def _verificar(db, logger):
     v = Verificador()
     cs = CategoriaService(db, logger)
     au = AutorService(db, logger, gerenciador_midia)
@@ -755,11 +826,70 @@ def verificar(db, logger):
             v.checar("nenhuma imagem órfã em midia/", True)
 
     verificar_estatisticas(v, db, logger, ns)
+    verificar_notificacoes_e_perfil(v, db, logger)
 
     print(f"\nResultado: {v.ok} verificações OK, {len(v.falhas)} falha(s), {len(v.avisos)} aviso(s).")
     for nome in v.falhas:
         print(f"  - FALHA: {nome}")
     return v
+
+
+def verificar_notificacoes_e_perfil(v, db, logger):
+    """Painel de notificações, perfil e preferências — sem alterar nada de usuários reais
+    (a leitura é testada com um usuário fictício, depois removido)."""
+    print("\nNotificações e perfil")
+    try:
+        tabelas_ok = all(db._rodar(f"SELECT COUNT(*) AS n FROM {t}", fetch=True) is not None
+                         for t in ("notificacoes", "notificacoes_lidas", "preferencias_usuario"))
+    except ErroBanco as erro:
+        v.checar("tabelas de notificações e preferências existem", False, str(erro))
+        return
+    v.checar("tabelas de notificações e preferências existem", tabelas_ok)
+    fantasma = -987654   # usuário fictício: não mexe no 'lida / não lida' de ninguém
+    try:
+        ns = NotificacaoService(db, logger, fantasma)
+        total = ns.contagens()
+        v.checar("contagens do painel", total.ok and total.dados["todas"] >= 1 and total.dados["nao_lidas"] == total.dados["todas"]
+                 and total.dados["urgentes"] <= total.dados["todas"], str(total.dados if total.ok else total.mensagem))
+        lista = ns.listar("todas", 1, 5)
+        v.checar("listagem (mais recentes primeiro)", lista.ok and len(lista.dados["itens"]) >= 1 and all(
+            lista.dados["itens"][i]["criado_em"] >= lista.dados["itens"][i + 1]["criado_em"]
+            for i in range(len(lista.dados["itens"]) - 1)), lista.mensagem)
+        v.checar("tempo relativo e rótulo de tipo nos itens", all(i["tempo"] and i["tipo_rotulo"] for i in lista.dados["itens"]),
+                 str([(i["tempo"], i["tipo_rotulo"]) for i in lista.dados["itens"]]))
+        urgentes = ns.listar("urgentes", 1, 50)
+        v.checar("filtro de urgentes", urgentes.ok and all(i["urgente"] for i in urgentes.dados["itens"]))
+        if lista.dados["itens"]:
+            primeiro = lista.dados["itens"][0]["id"]
+            v.checar("marcar uma como lida", ns.marcar_lida(primeiro).ok and
+                     ns.contagens().dados["nao_lidas"] == total.dados["nao_lidas"] - 1)
+            v.checar("marcar todas como lidas", ns.marcar_todas_lidas().ok and ns.contagens().dados["nao_lidas"] == 0)
+    finally:
+        db._rodar("DELETE FROM notificacoes_lidas WHERE usuario_id = %s", (fantasma,), commit=True)
+    # preferências (usuário fictício)
+    pf = PerfilService(db, logger)
+    try:
+        padrao = pf.preferencias(fantasma)
+        v.checar("preferências padrão", padrao == {"alerta_sonoro": True, "email_urgencia": False,
+                                                    "revisao_automatica": False, "polegadas_coluna": False}, str(padrao))
+        v.checar("salvar e ler preferências", pf.salvar_preferencias(fantasma, {"revisao_automatica": True}).ok
+                 and pf.preferencias(fantasma)["revisao_automatica"] is True)
+        v.checar("preferência desconhecida é recusada", not pf.salvar_preferencias(fantasma, {"inventada": True}).ok)
+    finally:
+        db._rodar("DELETE FROM preferencias_usuario WHERE usuario_id = %s", (fantasma,), commit=True)
+    # regras de senha e perfil real (somente leitura)
+    regras = avaliar_senha("NovaSenha#2026!", "SenhaAntiga@123", "NovaSenha#2026!")
+    v.checar("regras de senha", all(ok for _, ok in regras) and not all(ok for _, ok in avaliar_senha("curta")))
+    usuario = db._rodar("SELECT id FROM usuarios ORDER BY id LIMIT 1", fetch=True)
+    if usuario:
+        perfil = pf.obter(usuario[0]["id"])
+        v.checar("perfil do primeiro usuário carrega", perfil.ok and perfil.dados["prontuario"].startswith("NM-")
+                 and perfil.dados["materias_publicadas"] >= 0, perfil.mensagem)
+        v.checar("dados inválidos são recusados", not pf.salvar_dados(usuario[0]["id"], {"nome": "A"}).ok)
+    else:
+        v.avisar("nenhum usuário cadastrado", "o perfil real não foi verificado (crie uma conta e rode de novo)")
+    contadas = db._rodar("SELECT COUNT(*) AS n FROM notificacoes WHERE ator = %s", (ATOR_SEED,), fetch=True)[0]["n"]
+    v.checar("notificações de exemplo do seed existem", int(contadas) >= 1, str(contadas))
 
 
 def verificar_estatisticas(v, db, logger, ns):

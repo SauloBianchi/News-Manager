@@ -27,7 +27,6 @@ ITENS_NAVEGACAO = [
     ("categorias", "Categorias"),
     ("autores", "Autores"),
     ("graficos", "Gráficos"),
-    ("seguranca", "Segurança"),
 ]
 
 MARGEM = 28
@@ -48,11 +47,13 @@ class Cabecalho(tk.Frame):
     """Faixa superior fixa: dateline + masthead + navegação."""
 
     def __init__(self, parent, usuario, ao_navegar, ao_nova_materia, ao_sair,
-                 verificar_conexao=None):
+                 verificar_conexao=None, ao_notificacoes=None, ao_perfil=None):
         super().__init__(parent, bg=t.BG)
         t.Fontes.preparar(parent)
         self.usuario = usuario or {}
         self.ao_navegar = ao_navegar
+        self.ao_notificacoes = ao_notificacoes
+        self.ao_perfil = ao_perfil
         self.verificar_conexao = verificar_conexao
         self._itens = {}
         self._ativo = None
@@ -103,16 +104,51 @@ class Cabecalho(tk.Frame):
         direita.pack(side="right")
         t.botao_primario(direita, "+ Nova matéria", ao_nova_materia).pack(side="left", padx=(0, 18))
 
-        nome = self.usuario.get("nome") or self.usuario.get("usuario") or "Redação"
-        tk.Label(direita, text=_inicial(nome), fg="#FFFFFF", bg=t.PRIMARY, width=3, height=1,
-                 font=t.Fontes.display(14)).pack(side="left")
-        dados = tk.Frame(direita, bg=t.BG)
+        # sino de despachos com o selo de não lidas
+        sino = tk.Frame(direita, bg=t.BG, cursor="hand2")
+        sino.pack(side="left", padx=(0, 18))
+        icone = tk.Label(sino, text="✉", fg=t.TEXT, bg=t.BG, cursor="hand2", font=t.Fontes.display(20))
+        icone.pack(side="left")
+        self.selo_notificacoes = tk.Label(sino, text="", fg="#FFFFFF", bg=t.PRIMARY, padx=4,
+                                          font=t.Fontes.corpo(7, "bold"))
+        for w in (sino, icone, self.selo_notificacoes):
+            w.bind("<Button-1>", lambda e: self.ao_notificacoes() if self.ao_notificacoes else None)
+
+        # bloco do usuário: clicar abre o Perfil
+        bloco = tk.Frame(direita, bg=t.BG, cursor="hand2")
+        bloco.pack(side="left")
+        self.avatar = tk.Label(bloco, text="", fg="#FFFFFF", bg=t.PRIMARY, width=3, height=1, cursor="hand2",
+                               font=t.Fontes.display(14))
+        self.avatar.pack(side="left")
+        dados = tk.Frame(bloco, bg=t.BG, cursor="hand2")
         dados.pack(side="left", padx=(8, 12))
-        tk.Label(dados, text=nome, fg=t.TEXT, bg=t.BG, font=t.Fontes.corpo(10, "bold")).pack(anchor="w")
-        apelido = self.usuario.get("usuario")
-        tk.Label(dados, text=(f"@{apelido}" if apelido else "REDAÇÃO").upper(), fg=t.TEXT_MUTED,
-                 bg=t.BG, font=t.Fontes.corpo(7, "bold")).pack(anchor="w")
+        self.rotulo_nome = tk.Label(dados, text="", fg=t.TEXT, bg=t.BG, cursor="hand2", font=t.Fontes.corpo(10, "bold"))
+        self.rotulo_nome.pack(anchor="w")
+        self.rotulo_apelido = tk.Label(dados, text="", fg=t.TEXT_MUTED, bg=t.BG, cursor="hand2",
+                                       font=t.Fontes.corpo(7, "bold"))
+        self.rotulo_apelido.pack(anchor="w")
+        for w in (bloco, self.avatar, dados, self.rotulo_nome, self.rotulo_apelido):
+            w.bind("<Button-1>", lambda e: self.ao_perfil() if self.ao_perfil else None)
+        self.atualizar_usuario(self.usuario)
         t.link_texto(direita, "SAIR", ao_sair).pack(side="left")
+
+    def atualizar_usuario(self, usuario):
+        """Redesenha nome, cargo e inicial do usuário (depois de editar o Perfil)."""
+        self.usuario = usuario or {}
+        nome = self.usuario.get("nome") or self.usuario.get("usuario") or "Redação"
+        self.avatar.configure(text=_inicial(nome))
+        self.rotulo_nome.configure(text=nome)
+        cargo = self.usuario.get("cargo")
+        apelido = self.usuario.get("usuario")
+        self.rotulo_apelido.configure(text=(cargo or (f"@{apelido}" if apelido else "REDAÇÃO")).upper())
+
+    def definir_notificacoes(self, nao_lidas):
+        """Mostra (ou esconde) o selo vermelho com o número de despachos não lidos."""
+        if nao_lidas and nao_lidas > 0:
+            self.selo_notificacoes.configure(text="99+" if nao_lidas > 99 else str(nao_lidas))
+            self.selo_notificacoes.pack(side="left", anchor="n", padx=(2, 0))
+        else:
+            self.selo_notificacoes.pack_forget()
 
     # ---------- navegação ----------
     def _montar_navegacao(self):

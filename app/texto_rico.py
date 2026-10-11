@@ -220,6 +220,68 @@ def classificar_flesch(valor) -> str:
     return "Muito difícil"
 
 
+PALAVRAS_POR_POLEGADA = 29    # uma polegada de coluna impressa comporta ~29 palavras (≈ 260 por coluna de 9 pol.)
+
+
+def polegadas_de_coluna(palavras: int) -> str:
+    """'9,0 pol.' — espaço que o texto ocuparia na coluna do jornal (opção do Perfil)."""
+    return f"{palavras / PALAVRAS_POR_POLEGADA:.1f}".replace(".", ",") + " pol."
+
+
+# ---------------------------------------------------------------------------
+# Revisão automática de redação (opção "modo de revisão automática" do Perfil)
+# Não é um corretor ortográfico (não há dicionário): aponta problemas de forma
+# que o Manual de Redação costuma proibir.
+# ---------------------------------------------------------------------------
+_ABREVIACOES = {"sr", "sra", "srta", "dr", "dra", "prof", "profa", "ex", "etc", "av", "pág", "pag", "vs",
+                "cia", "ltda", "exmo", "exma", "ilmo", "ilma", "min", "cap", "fig", "obs", "pp", "ed"}
+_PROTEGIDO = re.compile(r"!\[[^\]]*\]\([^)]*\)|\]\([^)]*\)|https?://\S+|www\.\S+", re.IGNORECASE)
+FRASE_LONGA_PALAVRAS = 60
+
+
+def revisar_texto(texto: str):
+    """Lista de apontamentos [{linha, inicio, fim, mensagem}] (linha começa em 1; colunas em 0).
+    Ignora endereços, imagens e a parte do endereço dos links."""
+    achados = []
+    for numero, bruta in enumerate((texto or "").replace("\r\n", "\n").split("\n"), start=1):
+        # troca o que não deve ser revisado por um caractere neutro do mesmo tamanho (mantém as posições)
+        linha = _PROTEGIDO.sub(lambda m: "·" * len(m.group(0)), bruta)
+        if not linha.strip() or re.fullmatch(r"\s*-{3,}\s*", linha):
+            continue
+
+        def achar(inicio, fim, mensagem):
+            achados.append(dict(linha=numero, inicio=inicio, fim=max(fim, inicio + 1), mensagem=mensagem))
+
+        for m in re.finditer(r"(?<=\S)  +(?=\S)", linha):
+            achar(m.start(), m.end(), "Espaço duplo")
+        for m in re.finditer(r"\b([A-Za-zÀ-ÿ]{2,})\s+\1\b", linha, re.IGNORECASE):
+            achar(m.start(), m.end(), f"Palavra repetida: \"{m.group(1)}\"")
+        for m in re.finditer(r"(?<=\S)\s+(?=[,;:!?]|\.(?!\.))", linha):
+            achar(m.start(), m.end() + 1, "Espaço antes da pontuação")
+        for m in re.finditer(r"(?<=[A-Za-zÀ-ÿ])[,;:](?=[A-Za-zÀ-ÿ])", linha):
+            achar(m.start(), m.end() + 1, "Falta espaço depois da pontuação")
+        for m in re.finditer(r"(?<=[a-zà-ÿ])[.!?](?=[A-ZÀ-Ý])", linha):
+            achar(m.start(), m.end() + 1, "Falta espaço entre as frases")
+        for m in re.finditer(r"([A-Za-zÀ-ÿ0-9]+)([.!?…]+)\s+([a-zà-ÿ])", linha):
+            palavra = m.group(1)
+            if palavra.lower() in _ABREVIACOES or len(palavra) <= 2 or palavra.isdigit():
+                continue
+            achar(m.start(3), m.end(3), "Frase iniciada com letra minúscula")
+        primeira = re.match(r"^\s*(?:#{2,3}\s+|>\s*|[-*]\s+|\d+\.\s+)?([A-Za-zÀ-ÿ])", linha)
+        if primeira and primeira.group(1).islower():
+            achar(primeira.start(1), primeira.end(1), "Parágrafo iniciado com letra minúscula")
+        if linha.count("(") != linha.count(")"):
+            achar(len(linha.rstrip()) - 1, len(linha.rstrip()), "Parênteses sem par")
+        if linha.count("“") != linha.count("”") or linha.count('"') % 2:
+            achar(len(linha.rstrip()) - 1, len(linha.rstrip()), "Aspas sem par")
+        for m in re.finditer(r"[^.!?…]+(?:[.!?…]+|$)", linha):
+            tamanho = len(m.group(0).split())
+            if tamanho > FRASE_LONGA_PALAVRAS:
+                achar(m.start(), m.end(), f"Frase longa ({tamanho} palavras): considere dividir")
+    achados.sort(key=lambda a: (a["linha"], a["inicio"]))
+    return achados
+
+
 # ---------------------------------------------------------------------------
 # Operações da barra de ferramentas do editor
 # Todas recebem o texto inteiro e as posições (em caracteres) da seleção e

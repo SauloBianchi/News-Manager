@@ -35,6 +35,12 @@ com Tkinter e banco de dados MySQL.
   texto formatado, capa com legenda, bloco do autor, palavras-chave,
   leituras suplementares da mesma editoria e exportação em HTML (para
   imprimir/salvar em PDF pelo navegador).
+- **Notificações** (envelope no cabeçalho): painel lateral "Despachos & Notificações" com abas
+  Todas / Não lidas / Urgente, selo de não lidas, tempo relativo, atalho para o assunto, histórico
+  completo, "lido" por usuário, alerta sonoro e e-mail para furos de reportagem.
+- **Perfil** (clicar no nome no cabeçalho): crachá com foto, dados biográficos, troca de senha com
+  regras em tempo real, 2FA e preferências do operador (alerta sonoro, e-mail de urgência, revisão
+  automática de redação e polegadas de coluna no editor).
 - **Gráficos & Análise** (tela inteira, gráficos do matplotlib embutidos): indicadores com
   comparação com o período anterior, distribuição por editoria, evolução no período,
   produtividade por autor, volume por dia da semana, pipeline redatorial, leitura automática
@@ -71,6 +77,10 @@ News-Manager-main/
 │   ├── texto_rico.py                # Formatação do texto das matérias, estatísticas e exportação HTML
 │   ├── tela_editor.py               # Tela Nova Matéria: editor redacional completo
 │   ├── tela_leitura.py              # Tela de leitura da matéria (página inteira)
+│   ├── notificacoes.py              # Notificações: eventos, leitura por usuário, e-mail de urgência
+│   ├── perfil.py                    # Regras do Perfil: dados, foto, senha, 2FA e preferências
+│   ├── tela_notificacoes.py         # Painel de notificações (gaveta) e histórico
+│   ├── tela_perfil.py               # Tela de Perfil
 │   ├── estatisticas.py              # Consultas e indicadores da tela de Gráficos (filtros, KPIs, séries)
 │   ├── graficos.py                  # Gráficos do matplotlib e relatório em PDF
 │   ├── tela_graficos.py             # Tela Gráficos & Análise

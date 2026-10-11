@@ -36,6 +36,10 @@ from .tela_noticias import NoticiasFrame
 from .tela_editor import EditorFrame
 from .tela_leitura import LeituraFrame
 from .tela_graficos import GraficosFrame
+from .tela_notificacoes import PainelNotificacoes
+from .tela_perfil import PerfilFrame
+from .notificacoes import NotificacaoService, Sessao
+from .perfil import PerfilService
 from .shell import Cabecalho, AreaAbas, Rodape
 
 
@@ -878,7 +882,10 @@ class ConfiguracaoDoisFatoresDialog(tk.Toplevel):
 # =============================================================================
 class MainWindow(tk.Tk):
     """Janela principal: cabeçalho/masthead com navegação (Notícias,
-    Categorias, Autores, Gráficos e Segurança) e a tela de cada seção."""
+    Categorias, Autores e Gráficos), painel de notificações, perfil do usuário
+    (que reúne os dados, a senha e o 2FA) e a tela de cada seção."""
+
+    INTERVALO_NOTIFICACOES_MS = 20_000
 
     def __init__(self, db: DatabaseManager, logger: Logger, usuario: dict = None):
         super().__init__()
@@ -893,8 +900,22 @@ class MainWindow(tk.Tk):
         self.geometry("1280x860")
         self.minsize(1180, 700)
 
+        # preferências do operador (alerta sonoro, revisão automática...) valem em todas as telas
+        preferencias = {}
+        if self.usuario.get("id"):
+            preferencias = {k: "1" if v else "0"
+                            for k, v in PerfilService(db, logger).preferencias(self.usuario["id"]).items()}
+        Sessao.definir(self.usuario, preferencias)
+        self._ultimo_urgente = None
+        self._primeira_checagem = True
+
         self._montar_layout()
         self.mostrar_aba("noticias")
+        self.bind("<Escape>", lambda e: self.painel_notificacoes.fechar())
+        if self.usuario.get("id"):
+            self.notificacoes.purgar_antigas()
+            self._atualizar_notificacoes()
+            self.after(self.INTERVALO_NOTIFICACOES_MS, self._tique_notificacoes)
 
     # ---------- Layout geral ----------
     def _montar_layout(self):
@@ -904,6 +925,8 @@ class MainWindow(tk.Tk):
             ao_nova_materia=self._nova_materia,
             ao_sair=self._sair,
             verificar_conexao=self._banco_conectado,
+            ao_notificacoes=self.alternar_notificacoes,
+            ao_perfil=lambda: self.mostrar_aba("perfil"),
         )
         self.cabecalho.pack(fill="x")
         Rodape(self).pack(side="bottom", fill="x")
@@ -919,7 +942,9 @@ class MainWindow(tk.Tk):
         self.aba_autores = AutoresFrame(
             self.area, self.db, self.logger, ao_alterar=self._apos_alterar_cadastros)
         self.aba_graficos = GraficosFrame(self.area, self.db, self.logger)
-        self.aba_seguranca = tk.Frame(self.area, bg=t.BG)
+        self.aba_perfil = PerfilFrame(
+            self.area, self.db, self.logger, self.usuario, ao_sair=self._sair,
+            ao_perfil_alterado=self._perfil_alterado, abrir_2fa=self._abrir_config_2fa)
         # Telas "inteiras" que não aparecem na navegação: editor redacional e leitura
         self.aba_editor = EditorFrame(
             self.area, self.db, self.logger, ao_ler=self.abrir_leitura,
@@ -935,11 +960,17 @@ class MainWindow(tk.Tk):
         self.area.adicionar("categorias", self.aba_categorias)
         self.area.adicionar("autores", self.aba_autores)
         self.area.adicionar("graficos", self.aba_graficos)
-        self.area.adicionar("seguranca", self.aba_seguranca)
+        self.area.adicionar("perfil", self.aba_perfil)
         self.area.adicionar("editor", self.aba_editor)
         self.area.adicionar("leitura", self.aba_leitura)
 
-        self._montar_aba_seguranca()
+        # Painel de despachos & notificações (gaveta sobre o lado direito da janela)
+        self.notificacoes = NotificacaoService(self.db, self.logger, self.usuario.get("id"))
+        self.painel_notificacoes = PainelNotificacoes(
+            self, self.db, self.logger, self.usuario.get("id"),
+            ao_abrir_alvo=self._abrir_alvo_notificacao,
+            ao_configurar=lambda: self.mostrar_aba("perfil"),
+            ao_contagem=self.cabecalho.definir_notificacoes)
 
     # ---------- Navegação ----------
     def _pode_sair_da_tela(self) -> bool:
@@ -955,7 +986,7 @@ class MainWindow(tk.Tk):
             return
         self.area.mostrar(chave)
         self.cabecalho.definir_ativa(chave)
-        if chave in ("noticias", "categorias", "autores", "graficos"):
+        if chave in ("noticias", "categorias", "autores", "graficos", "perfil"):
             self.area.tela(chave).recarregar()
 
     def abrir_editor(self, noticia_id=None, dados_iniciais=None):
@@ -990,8 +1021,62 @@ class MainWindow(tk.Tk):
         return bool(conexao and conexao.is_connected())
 
     def _apos_alterar_cadastros(self):
-        """Chamado quando uma notícia, categoria ou autor muda. A tela de Gráficos
-        se atualiza sozinha ao ser aberta; aqui não há nada a redesenhar."""
+        """Chamado quando uma notícia, categoria ou autor muda: a mudança pode ter gerado
+        uma notificação nova (a tela de Gráficos se atualiza sozinha ao ser aberta)."""
+        self._atualizar_notificacoes()
+
+    # ---------- Notificações ----------
+    def alternar_notificacoes(self):
+        self.painel_notificacoes.alternar()
+
+    def _atualizar_notificacoes(self):
+        """Atualiza o selo do sino (e o painel, se aberto) e toca o alerta de furo, se ligado."""
+        if not self.usuario.get("id"):
+            return
+        try:
+            if self.painel_notificacoes.aberto:
+                self.painel_notificacoes.recarregar()
+            else:
+                self.painel_notificacoes.atualizar_contagens()
+            urgente = self.notificacoes.urgente_pendente()
+            if urgente and urgente != self._ultimo_urgente and not self._primeira_checagem:
+                if Sessao.ativa("alerta_sonoro"):
+                    self.bell()
+            self._ultimo_urgente = urgente
+            self._primeira_checagem = False
+        except tk.TclError:
+            pass
+
+    def _tique_notificacoes(self):
+        try:
+            self._atualizar_notificacoes()
+            self.after(self.INTERVALO_NOTIFICACOES_MS, self._tique_notificacoes)
+        except tk.TclError:
+            pass   # a janela foi fechada
+
+    def _abrir_alvo_notificacao(self, alvo_tipo, alvo_id):
+        """Leva ao assunto de uma notificação clicada."""
+        if alvo_tipo == "noticia" and alvo_id:
+            if self.db.buscar_noticia_por_id(alvo_id):
+                self.abrir_leitura(alvo_id)
+            else:
+                messagebox.showinfo("Despachos", "Esta matéria não existe mais no acervo.")
+        elif alvo_tipo == "categoria":
+            self.mostrar_aba("categorias")
+        elif alvo_tipo == "autor":
+            self.mostrar_aba("autores")
+        elif alvo_tipo == "perfil":
+            self.mostrar_aba("perfil")
+
+    # ---------- Perfil ----------
+    def _perfil_alterado(self):
+        """Depois de salvar o perfil: atualiza o cabeçalho, o título da janela e as notificações."""
+        self.cabecalho.atualizar_usuario(self.usuario)
+        self.title(f"NewsManager - Sistema de Gerenciamento e Análise de Notícias — {self.usuario.get('nome')}")
+        self._atualizar_notificacoes()
+
+    def _abrir_config_2fa(self, ao_concluir):
+        ConfiguracaoDoisFatoresDialog(self, self.db, self.logger, self.usuario, ao_concluir)
 
     def _sair(self):
         """Encerra a sessão e volta para a tela de login."""
@@ -999,53 +1084,6 @@ class MainWindow(tk.Tk):
             return
         self.logger.info(f"Logout: {self.usuario.get('usuario')}")
         midia_global.limpar_cache()   # as imagens do Tk antigo não valem na próxima janela
+        Sessao.definir({})
         self.destroy()
         LoginWindow(self.db, self.logger).mainloop()
-
-    # ---------- Aba de Segurança (2FA) ----------
-    def _montar_aba_seguranca(self):
-        _cabecalho(
-            self.aba_seguranca, "Credenciais & Acesso", "Segurança da Conta",
-            "Verificação em duas etapas por e-mail para proteger o acesso à redação.",
-        )
-        cartao = tk.Frame(self.aba_seguranca, bg=t.SURFACE, highlightthickness=1,
-                          highlightbackground=t.BORDER)
-        cartao.pack(fill="x", padx=28, pady=(18, 0))
-        interno = tk.Frame(cartao, bg=t.SURFACE, padx=20, pady=18)
-        interno.pack(fill="x")
-
-        nome = self.usuario.get("nome", "—")
-        email = self.usuario.get("email", "—")
-        tk.Label(interno, text=f"Usuário logado: {nome} ({email})", fg=t.TEXT, bg=t.SURFACE,
-                 font=t.Fontes.corpo(11, "bold")).pack(anchor="w", pady=(0, 12))
-
-        self.label_status_2fa = tk.Label(interno, text="", fg=t.TEXT_MUTED, bg=t.SURFACE,
-                                         font=t.Fontes.corpo(10))
-        self.label_status_2fa.pack(anchor="w", pady=(0, 12))
-
-        self.botao_2fa = t.botao_primario(interno, "Ativar 2FA", self._alternar_2fa)
-        self.botao_2fa.pack(anchor="w")
-
-        self._atualizar_status_2fa()
-
-    def _alternar_2fa(self):
-        if not self.usuario.get("id"):
-            return
-        if self.usuario.get("dois_fatores_ativo"):
-            if messagebox.askyesno(
-                "Desativar verificação em duas etapas",
-                "Tem certeza que deseja desativar a verificação em duas etapas por e-mail?",
-            ):
-                self.db.desativar_dois_fatores(self.usuario["id"])
-                self.usuario["dois_fatores_ativo"] = False
-                self.logger.info(f"2FA (e-mail) desativado para: {self.usuario.get('usuario')}")
-                self._atualizar_status_2fa()
-        else:
-            ConfiguracaoDoisFatoresDialog(self, self.db, self.logger, self.usuario, self._atualizar_status_2fa)
-
-    def _atualizar_status_2fa(self):
-        ativo = bool(self.usuario.get("dois_fatores_ativo"))
-        self.label_status_2fa.configure(
-            text=f"Verificação em duas etapas (por e-mail): {'ATIVADA' if ativo else 'DESATIVADA'}"
-        )
-        self.botao_2fa.configure(text=("DESATIVAR 2FA" if ativo else "ATIVAR 2FA"))
