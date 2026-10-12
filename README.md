@@ -1,165 +1,212 @@
 # NewsManager
 
 Sistema de Gerenciamento e Análise de Notícias — aplicação desktop em Python
-com Tkinter e banco de dados MySQL.
+com Tkinter e banco de dados MySQL (ou MariaDB, como o do XAMPP).
 
-## Equipe
-- Ernesto
-- Gabriel S
-- Saulo
+**Equipe:** Ernesto, Gabriel S e Saulo.
 
-## Funcionalidades
-- Login e Cadastro com layout editorial (baseado no protótipo do Stitch),
-  usuário/e-mail + senha com hash **bcrypt**.
-- **Verificação em duas etapas (2FA) por código enviado por e-mail** —
-  código de 6 dígitos, válido por 10 minutos, enviado via SMTP.
-- **"Esqueci minha senha"** — redefine a senha confirmando a identidade
-  por um código enviado ao e-mail cadastrado.
-- **Login com o Google** (OAuth 2.0), tanto na tela de login quanto na de
-  cadastro — cria a conta automaticamente no primeiro acesso.
-- **E-mails com layout próprio** (HTML, no estilo editorial do app), com
-  suporte a logo customizado.
-- Janela Principal com cabeçalho/masthead e navegação no estilo do Stitch
-  (Notícias, Categorias, Autores, Gráficos, Segurança) e botão Sair.
-- **CRUD de notícias** (criar, listar com busca/filtros/paginação, editar,
-  excluir, ler): editor com linha fina, seção, jornalista, data/hora, estado
-  (rascunho, em pauta, revisão, publicado), manchete de capa e etiquetas.
-- **Editor redacional completo** (tela própria, aberto por "+ Nova matéria"):
-  título nobre, linha fina, barra de formatação (negrito, itálico, sublinhado,
-  intertítulos, citação, link, listas, imagem e filete), contadores, ficha de
-  rotativa (colunas, legibilidade Flesch, tempo de leitura, embargo), registro
-  editorial, etiquetas, auto-salvamento local e botões Salvar rascunho /
-  Publicar. O texto usa marcadores simples (`**negrito**`, `*itálico*`,
-  `## intertítulo`, `> citação`).
-- **Página de leitura da matéria** (tela inteira): sumário "Nesta edição",
-  texto formatado, capa com legenda, bloco do autor, palavras-chave,
-  leituras suplementares da mesma editoria e exportação em HTML (para
-  imprimir/salvar em PDF pelo navegador).
-- **Notificações** (envelope no cabeçalho): painel lateral "Despachos & Notificações" com abas
-  Todas / Não lidas / Urgente, selo de não lidas, tempo relativo, atalho para o assunto, histórico
-  completo, "lido" por usuário, alerta sonoro e e-mail para furos de reportagem.
-- **Perfil** (clicar no nome no cabeçalho): crachá com foto, dados biográficos, troca de senha com
-  regras em tempo real, 2FA e preferências do operador (alerta sonoro, e-mail de urgência, revisão
-  automática de redação e polegadas de coluna no editor).
-- **Gráficos & Análise** (tela inteira, gráficos do matplotlib embutidos): indicadores com
-  comparação com o período anterior, distribuição por editoria, evolução no período,
-  produtividade por autor, volume por dia da semana, pipeline redatorial, leitura automática
-  dos dados e meta do período. Filtros por período (inclusive personalizado), editoria,
-  jornalista e estado da matéria; exportação em PDF e CSV.
-- **Dados de teste**: `python seed.py` cria editorias, autores e matérias em todos os
-  estados (com imagens) e roda uma verificação automática; o roteiro do que
-  conferir na tela está em `ROTEIRO_DE_TESTE.md`.
-- **Imagens**: fotografia de capa (com legenda e crédito) nas matérias e foto
-  dos jornalistas. Os arquivos são copiados para a pasta `midia/` (criada
-  automaticamente, fora do Git); precisa do Pillow (`pip install pillow`).
-- **Telas de Categorias e Autores** no layout do Stitch: cartões de resumo,
-  busca, filtros por função, formulários de cadastro/edição, paginação,
-  relatório de categorias em CSV e bloqueio de exclusão de quem tem matérias.
-- Gráfico de notícias por categoria (matplotlib).
-- Aba de Segurança para ativar/desativar o 2FA depois do cadastro.
-- Registro de eventos e erros em `logs/error.log`.
+## Índice
+1. [Guia rápido para um PC novo](#1-guia-rápido-para-um-pc-novo-windows--xampp)
+2. [Requisitos](#2-requisitos)
+3. [Instalação passo a passo](#3-instalação-passo-a-passo)
+4. [Levar o projeto (e os dados) para outro computador](#4-levar-o-projeto-e-os-dados-para-outro-computador)
+5. [Solução de problemas](#5-solução-de-problemas)
+6. [Funcionalidades](#6-funcionalidades)
+7. [Estrutura do projeto](#7-estrutura-do-projeto)
+8. [Como funcionam o 2FA, o "esqueci minha senha" e os e-mails](#8-como-funcionam-o-2fa-o-esqueci-minha-senha-e-os-e-mails)
+9. [Dados de teste e roteiro de testes](#9-dados-de-teste-e-roteiro-de-testes)
+10. [Migrações de bancos antigos](#10-migrações-de-bancos-antigos)
 
-## Estrutura do projeto
-```
-News-Manager-main/
-├── main.py                        # Ponto de entrada — sempre rode a partir daqui
-├── requirements.txt                # Dependências
-├── README.md
-├── .gitignore
-├── app/                             # Código da aplicação
-│   ├── __init__.py
-│   ├── gui.py                       # Janelas Tkinter (login, cadastro, 2FA, principal)
-│   ├── database.py                  # Conexão MySQL e operações CRUD
-│   ├── cadastros.py                 # Regras de negócio do CRUD de categorias e autores (services)
-│   ├── telas_cadastros.py           # Telas Tkinter de Categorias e Autores (layout Stitch)
-│   ├── noticias.py                  # Regras de negócio do CRUD de notícias (NoticiaService)
-│   ├── tela_noticias.py             # Tela de Notícias: editor, feed em cartões e leitura
-│   ├── texto_rico.py                # Formatação do texto das matérias, estatísticas e exportação HTML
-│   ├── tela_editor.py               # Tela Nova Matéria: editor redacional completo
-│   ├── tela_leitura.py              # Tela de leitura da matéria (página inteira)
-│   ├── notificacoes.py              # Notificações: eventos, leitura por usuário, e-mail de urgência
-│   ├── perfil.py                    # Regras do Perfil: dados, foto, senha, 2FA e preferências
-│   ├── tela_notificacoes.py         # Painel de notificações (gaveta) e histórico
-│   ├── tela_perfil.py               # Tela de Perfil
-│   ├── estatisticas.py              # Consultas e indicadores da tela de Gráficos (filtros, KPIs, séries)
-│   ├── graficos.py                  # Gráficos do matplotlib e relatório em PDF
-│   ├── tela_graficos.py             # Tela Gráficos & Análise
-│   ├── midia.py                     # Importação, redimensionamento e exibição das imagens
-│   ├── shell.py                     # Cabeçalho/masthead, navegação, área de abas e rodapé
-│   ├── auth.py                      # Hash de senha, 2FA por e-mail e login com Google
-│   ├── theme.py                     # Paleta de cores e tipografia (estilo editorial)
-│   └── logger.py                    # Registro de eventos/erros
-├── config/
-│   ├── client_secret.json.example   # Modelo das credenciais OAuth do Google
-│   └── email_config.json.example    # Modelo das credenciais SMTP (2FA por e-mail)
-│       (os arquivos de verdade, sem ".example", também vão aqui — nunca commitados)
-├── assets/
-│   └── logo.png                     # Opcional — se existir, é usado nos e-mails (ver seção 8)
-├── sql/
-│   ├── schema.sql                   # Script de criação do banco e tabelas (do zero)
-│   ├── migration_auth.sql           # Migração da versão bem antiga (texto puro) para a atual
-│   └── migration_totp_para_email.sql  # Migração de quem já tinha a versão com TOTP/QR Code
-├── design/
-│   └── LayoutStitch/                 # Protótipo de telas gerado no Stitch (referência visual)
-├── logs/                              # Gerado em runtime (error.log)
-├── docs/                               # Documentação em PDF (diagrama de classes, etc.)
-└── screenshots/                         # Prints das telas da aplicação
+---
+
+## 1. Guia rápido para um PC novo (Windows + XAMPP)
+
+Se você só quer ver o sistema rodando, estes são os passos (os detalhes e as
+alternativas estão na [seção 3](#3-instalação-passo-a-passo)). Use o
+**PowerShell** na pasta que contém o `main.py`.
+
+```powershell
+# 1) Ambiente Python (uma vez por computador)
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1          # se der erro de "execução de scripts", veja a seção 5
+pip install -r requirements.txt
+
+# 2) Ligue o banco: abra o XAMPP Control Panel e clique em Start no MySQL (fica verde)
+
+# 3) Crie o banco e as tabelas (o schema.sql já cria o banco "newsmanager")
+$mysql = "C:\xampp\mysql\bin"
+& "$mysql\mysql.exe" -u root --default-character-set=utf8mb4 -e "source sql/schema.sql"
+
+# 4) Dados de teste (opcional, recomendado) e verificação automática
+python seed.py
+
+# 5) Abra o sistema e crie sua conta em "Criar conta"
+python main.py
 ```
 
-## Como executar
+> O banco se chama **`newsmanager`** (sem underline) — é o nome que o
+> `main.py` e o `schema.sql` usam. Não crie um banco com outro nome.
+>
+> O e-mail (2FA) e o login com o Google são **opcionais** para ver o sistema
+> funcionando; as instruções estão nas seções 3.5 e 3.6.
 
-### 1. Instalar dependências
-Na raiz do projeto:
-```bash
+---
+
+## 2. Requisitos
+
+| O que | Versão / observação |
+|---|---|
+| **Python** | 3.10 ou mais novo, **com Tkinter** (no instalador do python.org marque *tcl/tk and IDLE*). Teste com `python -m tkinter`: deve abrir uma janelinha. |
+| **MySQL ou MariaDB** | MySQL 8.x ou o MariaDB do **XAMPP** (10.4 funciona). O servidor precisa estar **ligado** — o `mysql.exe` sozinho é só o cliente. |
+| **Internet** | Para `pip install` e, se usados, e-mail (2FA) e login com o Google. |
+| **Permissões do banco** | O usuário do banco (`root` no XAMPP) precisa poder `CREATE`/`ALTER` tabelas: o sistema cria colunas e tabelas novas sozinho na primeira conexão. |
+| **Pasta gravável** | O projeto grava em `logs/`, `midia/`, `rascunhos/` e `config/`; não rode de dentro de *Program Files*. |
+
+Bibliotecas Python (todas no `requirements.txt`): `mysql-connector-python`,
+`matplotlib`, `pillow`, `bcrypt`, `google-auth-oauthlib` e `requests`.
+
+---
+
+## 3. Instalação passo a passo
+
+### 3.1 Obter o projeto
+Clone o repositório ou baixe o ZIP e extraia. Ao baixar o ZIP do GitHub, a
+pasta costuma ficar **duplicada** (`News-Manager-main\News-Manager-main`):
+todos os comandos abaixo devem ser rodados na pasta **que contém o `main.py`**.
+
+```powershell
+cd "C:\Users\SEU_USUARIO\Downloads\News-Manager-main\News-Manager-main"
+dir main.py        # tem que listar o arquivo
+```
+
+Confira também se a pasta `app\` está completa (cerca de 20 arquivos `.py`).
+Um erro como `No module named 'app.midia'` quer dizer que algum arquivo não
+foi copiado.
+
+### 3.2 Python e ambiente virtual
+```powershell
+python --version                  # 3.10 ou superior
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1      # o prompt passa a mostrar (.venv)
 pip install -r requirements.txt
 ```
-(O envio de e-mail usa só bibliotecas nativas do Python — `smtplib`,
-`hashlib`, `secrets` — não precisa instalar nada além disso.)
+- Cada novo PowerShell precisa **ativar o ambiente de novo** (`.\.venv\Scripts\Activate.ps1`).
+- Se o PowerShell reclamar que *a execução de scripts foi desabilitada*, rode
+  `Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass` e ative de novo
+  (vale só para aquela janela).
+- Se `python` não for reconhecido, instale o Python (marcando *Add python.exe to PATH*)
+  ou tente `py -m venv .venv`.
 
-### 2. Configurar o banco de dados MySQL
+### 3.3 Banco de dados
+O `schema.sql` **cria o banco `newsmanager`** e todas as tabelas. Você só
+precisa de um servidor MySQL/MariaDB ligado e do caminho dos programas dele.
 
-**Banco novo (ainda não existe):**
-```bash
-mysql -u root -p < sql/schema.sql
+**Descubra qual servidor você tem** e guarde o caminho numa variável
+(repita isso em cada PowerShell novo — uma variável vazia causa o erro
+*"O termo '\mysql.exe' não é reconhecido"*):
+
+```powershell
+$mysql = "C:\xampp\mysql\bin"                                   # XAMPP
+# $mysql = "C:\Program Files\MySQL\MySQL Server 8.0\bin"       # MySQL Server 8
+Test-Path "$mysql\mysql.exe"                                    # tem que dar True
 ```
 
-**Banco criado com a versão bem antiga** (tabela `usuarios` só com
-`usuario`/`senha` em texto puro):
-```bash
-mysql -u root -p newsmanager < sql/migration_auth.sql
+#### Passo 1 — ligar o servidor (escolha UMA opção)
+
+**Opção A — XAMPP Control Panel (a mais simples).** Abra
+`C:\xampp\xampp-control.exe` e clique em **Start** na linha do **MySQL**
+até ele ficar verde. Não é preciso criar pasta de dados nem rodar
+`mysqld` à mão.
+
+**Opção B — XAMPP pela linha de comando (sem o painel).**
+```powershell
+& "C:\xampp\mysql\bin\mysqld.exe" --defaults-file="C:\xampp\mysql\bin\my.ini" --console
 ```
+Essa janela **fica ocupada** mostrando o log; não feche (aparece
+`ready for connections`). Use **outro** PowerShell para os próximos passos.
+Para desligar: `Ctrl+C` na janela, ou `& "$mysql\mysqladmin.exe" -u root shutdown`.
 
-**Banco que já tinha a versão intermediária com 2FA por TOTP/QR Code**
-(colunas `totp_secret`/`totp_ativo`):
-```bash
-mysql -u root -p newsmanager < sql/migration_totp_para_email.sql
+**Opção C — MySQL Server instalado como serviço.**
+```powershell
+Get-Service *mysql*              # mostra, por exemplo, MySQL80 (Stopped ou Running)
+net start MySQL80                # precisa de PowerShell como Administrador
 ```
+Se aparecer *Acesso negado*, abra o PowerShell com **Executar como
+administrador**. Em computador de laboratório sem administrador, use a opção A,
+B ou D.
 
-Leia os comentários dentro de cada script. Como as senhas usam hash bcrypt
-(calculado em Python), o jeito mais simples de testar depois de migrar a
-partir da versão bem antiga é recriar os usuários pela própria tela
-**Criar conta** do aplicativo. Não existe mais um usuário `admin`/`admin123`
-pré-cadastrado.
+**Opção D — pasta de dados própria (avançado; computador sem permissão para
+o serviço).** Cria um servidor separado dentro da sua pasta de usuário. **O
+comando de inicialização depende do tipo de servidor** — veja qual é o seu:
+```powershell
+& "$mysql\mysqld.exe" --version          # mostra "MariaDB" (XAMPP) ou "MySQL"
+```
+```powershell
+$dados = "$env:USERPROFILE\mysql-dados"
+New-Item -ItemType Directory -Force -Path $dados | Out-Null     # a pasta PRECISA existir antes
 
-### 3. Ajustar a conexão com o MySQL
-Edite as credenciais em `main.py`, na criação de `DatabaseManager`
-(`host`, `user`, `password`, `database`), conforme o seu ambiente.
+# MariaDB (XAMPP) — NÃO use --initialize-insecure aqui (é só do MySQL)
+& "$mysql\mysql_install_db.exe" --datadir="$dados"
+# MySQL Server:
+# & "$mysql\mysqld.exe" --initialize-insecure --datadir="$dados"
 
-### 4. Configurar o envio de e-mail (necessário para o 2FA)
+& "$mysql\mysqld.exe" --datadir="$dados" --console               # janela fica ocupada
+```
+Isso cria o usuário `root` **sem senha**, que é o que o `main.py` espera. Não
+deixe dois servidores ligados ao mesmo tempo: os dois disputam a porta 3306.
+
+#### Passo 2 — testar a conexão
+```powershell
+& "$mysql\mysql.exe" -u root -e "SELECT VERSION();"
+```
+Se mostrar a versão, o servidor está no ar. Se aparecer
+`ERROR 2002/2003 ... (10061)`, o servidor **não está rodando**: volte ao
+passo 1.
+
+#### Passo 3 — criar o banco e as tabelas
+Na pasta do projeto (onde está a pasta `sql\`):
+```powershell
+& "$mysql\mysql.exe" -u root --default-character-set=utf8mb4 -e "source sql/schema.sql"
+& "$mysql\mysql.exe" -u root -e "USE newsmanager; SHOW TABLES;"
+```
+- `--default-character-set=utf8mb4` evita acentos quebrados ("PolÃ­tica") nos
+  dados de exemplo do script.
+- O PowerShell **não aceita** `mysql ... < arquivo.sql`; por isso usamos
+  `-e "source ..."`.
+- Se o `root` tiver senha, acrescente `-p` (ele pede a senha) — e ajuste o
+  `main.py` (seção 3.4).
+- **Atalho:** depois de instalar as dependências, o `python seed.py` também
+  cria o banco a partir do `sql/schema.sql` se ele ainda não existir.
+
+#### O que o sistema cria sozinho
+Ao conectar, o sistema confere o banco e **adiciona as colunas e tabelas que
+faltarem** (perfil do usuário, notificações, imagens, etc.). Por isso o
+usuário do banco precisa de permissão de `CREATE` e `ALTER`.
+
+### 3.4 Conectar o sistema ao banco
+As credenciais ficam em `main.py`, na criação do `DatabaseManager`:
+```python
+db = DatabaseManager(host="localhost", user="root", password="", database="newsmanager")
+```
+- **XAMPP:** `root` sem senha — já é o padrão, não precisa mexer.
+- **MySQL Server** instalado com senha no `root`: coloque-a em `password=""`.
+  **Não faça commit** de senha real.
+- A porta usada é a padrão do MySQL, **3306**. Se outro MySQL já estiver nela,
+  desligue um dos dois.
+- O `seed.py` aceita as mesmas informações pela linha de comando:
+  `python seed.py --usuario root --senha "SUA_SENHA" --banco newsmanager`.
+
+### 3.5 Envio de e-mail (necessário só para o 2FA e o "esqueci minha senha")
 O código de verificação é enviado por SMTP. O jeito mais simples para um
-projeto de faculdade é usar uma conta do Gmail com **Senha de App**:
+trabalho de faculdade é uma conta do Gmail com **Senha de App**:
 
-1. Na Conta Google que vai enviar os e-mails, ative a **Verificação em
-   duas etapas** (em myaccount.google.com/security) — é pré-requisito
-   para gerar senhas de app.
-2. Ainda em "Segurança", acesse **Senhas de app**
-   (myaccount.google.com/apppasswords), crie uma nova senha para o app
-   "NewsManager" e copie o código de 16 letras gerado.
-   - Se a opção "Senhas de app" não aparecer, é porque a conta usa
-     verificação em 2 etapas de outro jeito (chave de segurança, etc.) —
-     nesse caso, use uma conta pessoal comum do Gmail só para testes, ou
-     um serviço como o Mailtrap/SendGrid (mesma configuração, mudando
-     `smtp_host`/`smtp_porta`).
+1. Na conta Google que vai enviar os e-mails, ative a **Verificação em duas
+   etapas** (myaccount.google.com/security) — é pré-requisito.
+2. Em myaccount.google.com/apppasswords, crie uma senha para o app
+   "NewsManager" e copie o código de 16 letras.
+   - Se a opção não aparecer, use uma conta pessoal comum do Gmail só para
+     testes ou um serviço como Mailtrap/SendGrid (mesma configuração,
+     mudando `smtp_host`/`smtp_porta`).
 3. Copie `config/email_config.json.example` para `config/email_config.json`
    e preencha:
    ```json
@@ -171,98 +218,269 @@ projeto de faculdade é usar uma conta do Gmail com **Senha de App**:
      "remetente_nome": "NewsManager"
    }
    ```
-4. **Nunca** faça commit do `config/email_config.json` de verdade — ele já
-   está no `.gitignore`. Cada integrante que for rodar o projeto localmente
-   precisa da sua própria cópia (ou combinar de usar a mesma, compartilhada
-   fora do Git).
+4. **Nunca** faça commit do `config/email_config.json` (já está no
+   `.gitignore`). Cada integrante precisa da sua cópia, combinada fora do Git.
 
-Se quiser usar outro provedor de e-mail (Outlook, um SMTP da faculdade,
-etc.), só troca `smtp_host`/`smtp_porta`/`smtp_usuario`/`smtp_senha` —
-o código não depende do Gmail especificamente.
+Sem esse arquivo o sistema funciona normalmente; ele só avisa o que falta
+quando você tenta usar 2FA, "esqueci minha senha" ou o e-mail de urgência.
 
-### 5. Configurar o login com o Google (necessário para o botão "Entrar/Cadastrar com o Google")
-1. Acesse o [Google Cloud Console](https://console.cloud.google.com/) e
-   crie (ou reaproveite) um projeto.
-2. Em **APIs e Serviços → Tela de consentimento OAuth**, configure o app
-   como "Externo" (ou "Interno", se for Workspace) e adicione os escopos
-   `openid`, `.../auth/userinfo.email` e `.../auth/userinfo.profile`.
-   - Enquanto o app estiver em modo de teste, adicione os e-mails da
-     equipe em **Usuários de teste** (senão o Google bloqueia o login).
-3. Em **APIs e Serviços → Credenciais → Criar credenciais → ID do cliente
-   OAuth**, escolha o tipo de aplicativo **"Aplicativo para computador"**
-   (Desktop app).
-4. Baixe o JSON gerado, renomeie para `client_secret.json` e coloque
-   dentro da pasta **`config/`** (`config/client_secret.json`). Use
-   `config/client_secret.json.example` como referência do formato esperado.
-5. **Nunca** faça commit do `client_secret.json` de verdade — ele já está
-   no `.gitignore`.
+### 3.6 Login com o Google (necessário só para o botão "Entrar com o Google")
+1. No [Google Cloud Console](https://console.cloud.google.com/), crie (ou
+   reaproveite) um projeto.
+2. Em **APIs e Serviços → Tela de consentimento OAuth**, configure o app como
+   "Externo" e adicione os escopos `openid`, `.../auth/userinfo.email` e
+   `.../auth/userinfo.profile`. Enquanto estiver em modo de teste, adicione os
+   e-mails da equipe em **Usuários de teste** (senão o Google bloqueia o login).
+3. Em **Credenciais → Criar credenciais → ID do cliente OAuth**, escolha
+   **"Aplicativo para computador"** (Desktop app).
+4. Baixe o JSON, renomeie para `client_secret.json` e coloque em
+   `config/client_secret.json` (use `config/client_secret.json.example` como
+   referência). **Nunca** faça commit dele.
 
-Ao clicar em "Entrar com o Google" ou "Cadastrar com o Google", o
-NewsManager abre o navegador padrão para o login e sobe um servidor local
-temporário só para capturar o retorno do Google — não é preciso nenhuma
-configuração de servidor/deploy.
+O navegador abre para o login e o sistema sobe um servidor local temporário só
+para receber o retorno do Google; não há nada para publicar.
 
-### 6. Como funciona o 2FA por e-mail
-- Na tela de **Cadastro**, a caixa "Ativar verificação em duas etapas por
-  e-mail" vem marcada por padrão. Ao criar a conta, o sistema já envia um
-  código de 6 dígitos para o e-mail informado; digitando o código
-  corretamente, o 2FA fica ativado.
-- É possível pular a ativação e configurar depois, na aba **Segurança**
-  da janela principal.
-- No login tradicional (usuário/senha), se a conta tiver 2FA ativo, o
-  sistema envia (de novo) um código por e-mail e pede que ele seja
-  digitado antes de liberar o acesso. Tem um link "Reenviar código" caso
-  o e-mail demore ou não chegue.
-- O código expira em 10 minutos e só pode ser usado uma vez.
-- Contas que entram via **Google** não passam pelo 2FA do NewsManager
-  nesse fluxo, já que a própria Conta Google autentica o usuário.
-- Se `config/email_config.json` não existir ou estiver incompleto, o
-  sistema avisa exatamente o que falta configurar, em vez de travar.
+### 3.7 Primeiro acesso e dados de teste
+1. Rode `python main.py` e clique em **Criar conta** — não existe usuário
+   `admin` pré-cadastrado.
+2. Para ter conteúdo para testar (editorias, autores, matérias, gráficos e
+   despachos de exemplo), rode `python seed.py` (seção 9).
 
-### 7. Como funciona o "Esqueci minha senha"
-- Na tela de **Login**, o link "Esqueceu a senha?" abre uma janela em
-  duas etapas: primeiro pede o usuário/e-mail da conta; se encontrada,
-  envia um código de 6 dígitos para o e-mail cadastrado.
-- Na segunda etapa, a pessoa informa o código recebido, a nova senha e a
-  confirmação. O código tem a mesma validade de 10 minutos do 2FA (tem
-  link "Reenviar código" também).
-- Contas criadas só pelo **Google** (sem senha local) mostram um aviso
-  explicando que o login é feito só pelo botão do Google.
-- Por simplicidade, se o usuário/e-mail informado não existir, o sistema
-  avisa diretamente ("Não encontramos uma conta..."). Em um sistema de
-  produção, o ideal seria mostrar sempre a mesma mensagem genérica (algo
-  como "se essa conta existir, enviamos um e-mail"), para não revelar se
-  um e-mail está ou não cadastrado — vale considerar isso na documentação
-  do trabalho, se for pedido uma análise de segurança.
-
-### 8. Personalizando o layout e o logo dos e-mails
-Todos os e-mails de código (2FA e "esqueci minha senha") são gerados em
-HTML, no mesmo estilo editorial do resto do app (cores, tipografia,
-filetes), com uma versão em texto puro como reserva para clientes que não
-exibem HTML.
-
-- O **layout** fica em `app/auth.py`, no método `EmailSender._montar_html`
-  — dá pra mexer nas cores, textos e na estrutura da tabela HTML ali.
-- Para usar um **logo de verdade** em vez do nome "NewsManager" estilizado
-  em texto, basta colocar um arquivo de imagem em `assets/logo.png` (ou
-  `.jpg`, ajustando `LOGO_FILE` em `app/auth.py`) na raiz do projeto. Se o
-  arquivo existir, ele é detectado e embutido automaticamente no e-mail;
-  se não existir, o e-mail continua funcionando normalmente com o logo em
-  texto.
-- Os textos de título/introdução do e-mail podem ser personalizados por
-  chamada (é o que já é feito para diferenciar o e-mail de 2FA do e-mail
-  de redefinição de senha) — veja os parâmetros `titulo` e `texto_intro`
-  de `EmailSender.enviar_codigo_verificacao`.
-
-### 9. Rodar a aplicação
-Sempre a partir da raiz do projeto (é daqui que os caminhos relativos de
-`config/`, `assets/` e `logs/` são resolvidos):
-```bash
+### 3.8 Rodar o sistema
+Sempre a partir da raiz do projeto (é de lá que `config/`, `assets/`,
+`midia/` e `logs/` são resolvidos), com o ambiente virtual ativo e o banco ligado:
+```powershell
 python main.py
 ```
 
-## Próximos passos sugeridos
-- Adicionar validações extras nos formulários.
-- Adicionar filtro por categoria/data na listagem de notícias.
-- Gerar relatório em PDF a partir dos dados do sistema.
-- Elaborar a documentação final (PDF) com diagrama de classes e prints.
+---
+
+## 4. Levar o projeto (e os dados) para outro computador
+
+**O que vai pelo Git (código):** tudo, menos o que está no `.gitignore`.
+
+**O que NÃO vai pelo Git e precisa ser refeito ou copiado em cada PC:**
+
+| Item | O que fazer no PC novo |
+|---|---|
+| Ambiente `.venv/` | Criar de novo (`python -m venv .venv` + `pip install -r requirements.txt`) |
+| Banco de dados | Criar com o `schema.sql` (seção 3.3) — ou restaurar um backup (abaixo) |
+| `config/email_config.json` | Copiar de uma fonte segura ou criar (seção 3.5) |
+| `config/client_secret.json` | Copiar ou baixar de novo do Google Cloud (seção 3.6) |
+| `midia/` (capas, fotos, imagens no texto) | Copiar a pasta junto com o backup do banco |
+| `config/graficos.json`, `rascunhos/`, `logs/` | Não precisa: são recriados (preferências dos gráficos, auto-salvamento e logs) |
+
+### Levar os dados de um PC para outro (backup e restauração)
+No PC de origem (use `--result-file`; o `>` do Windows PowerShell grava com
+codificação errada):
+```powershell
+& "$mysql\mysqldump.exe" -u root --databases newsmanager --default-character-set=utf8mb4 --result-file=backup_newsmanager.sql
+```
+Copie `backup_newsmanager.sql` **e a pasta `midia\`** para o outro PC (o banco
+guarda só o caminho das imagens). No PC de destino, com o servidor ligado:
+```powershell
+& "$mysql\mysql.exe" -u root --default-character-set=utf8mb4 -e "source backup_newsmanager.sql"
+```
+O backup já contém o `CREATE DATABASE`. Se você usa o sistema com um banco de
+cada computador, os dados de um PC **não aparecem** no outro: é por isso que
+o seed e o backup existem.
+
+### Checklist rápido de um PC novo
+- [ ] Python 3.10+ com Tkinter (`python -m tkinter` abre uma janela)
+- [ ] Projeto completo, na pasta que contém o `main.py`
+- [ ] `.venv` criado, ativado e `pip install -r requirements.txt` sem erros
+- [ ] Servidor MySQL/MariaDB **ligado** (`mysql -u root -e "SELECT VERSION();"` responde)
+- [ ] `schema.sql` executado (`SHOW TABLES;` lista as tabelas do banco `newsmanager`)
+- [ ] `main.py` com o usuário/senha corretos do banco
+- [ ] (Opcional) `config/email_config.json` e `config/client_secret.json`
+- [ ] `python seed.py` terminou com **0 falhas**
+- [ ] `python main.py` abre o login e a conta nova consegue entrar
+
+---
+
+## 5. Solução de problemas
+
+### Banco de dados / servidor
+
+| O que aparece | Causa | Solução |
+|---|---|---|
+| `ERROR 2002 (HY000): Can't connect to MySQL server ... (10061)` ou `ERROR 2003 ...` | O servidor **não está rodando** (o `mysql.exe` é só o cliente). | Ligue o servidor: XAMPP Control Panel → MySQL → Start, ou use as opções B, C ou D da seção 3.3. |
+| `O termo 'C:\Program Files\MySQL\...\mysqld.exe' não é reconhecido` | Esse caminho não existe no seu PC (por exemplo, você usa o XAMPP). | Procure o caminho certo: `Get-ChildItem C:\xampp\mysql\bin\mysqld.exe, "C:\Program Files\MySQL" -Recurse -Filter mysqld.exe -ErrorAction SilentlyContinue` e ajuste `$mysql`. |
+| `O termo '\mysql.exe' não é reconhecido` | A variável `$mysql` está vazia (ela vale só na janela em que foi criada). | Defina de novo: `$mysql = "C:\xampp\mysql\bin"`, ou use o caminho completo entre aspas. |
+| `Can't change dir to '...\mysql-dados\'` / `Can't create test file ... (Errcode: 2)` | A pasta de dados escolhida ainda não existe. | `New-Item -ItemType Directory -Force -Path "$env:USERPROFILE\mysql-dados"` e tente de novo. |
+| `Table 'mysql.servers' doesn't exist`, `Can't open and lock privilege tables`, `Could not open mysql.plugin table` | Uma pasta de dados nova foi iniciada com `--initialize-insecure` num **MariaDB** (esse parâmetro é só do MySQL). | Apague a pasta de dados (`Remove-Item -Recurse -Force "$env:USERPROFILE\mysql-dados"`), recrie e use `mysql_install_db.exe --datadir=...` (opção D da seção 3.3). Ou simplesmente use o servidor do XAMPP (opção A/B). |
+| `ERROR 1049 (42000): Unknown database 'newsmanager'` | O banco ainda não foi criado. | Rode o `schema.sql` (seção 3.3, passo 3) ou `python seed.py`. |
+| Criei um banco `news_manager` (com underline) | Nome errado: o sistema usa **`newsmanager`**. | Rode o `schema.sql` (ele cria o `newsmanager`) e, se quiser, apague o errado: `& "$mysql\mysql.exe" -u root -e "DROP DATABASE news_manager;"` |
+| `ERROR 1045 (28000): Access denied for user 'root'` | A senha do `root` não é vazia. | Informe a senha no `main.py` (`password="..."`) e use `-p` nos comandos do `mysql.exe`. |
+| `ERROR 1044` / `1142 ... command denied ... ALTER / CREATE` | O usuário do banco não tem permissão para criar/alterar tabelas. | Use o `root` ou conceda `ALL PRIVILEGES` ao usuário no banco `newsmanager`. |
+| `Acesso negado` ao rodar `net start MySQL80` / `sc.exe config` | O PowerShell não está como administrador (ou a conta não pode mexer em serviços). | Abra o PowerShell como administrador, ou use as opções A, B ou D. |
+| O XAMPP mostra *"MySQL shutdown unexpectedly"* ou o MySQL não fica verde | Porta 3306 em uso (por exemplo, o serviço `MySQL80` ligado) ou pasta de dados com problema. | Pare o outro MySQL (`net stop MySQL80` como admin) e veja o log em `C:\xampp\mysql\data\mysql_error.log`. |
+| Acentos estranhos (`Ã­`, `Ã§`) | Dados importados com a codificação errada. | Reimporte usando `--default-character-set=utf8mb4` (o banco já é `utf8mb4`). |
+| `Unknown column ...` depois de atualizar o código | O banco ainda não recebeu as colunas novas. | Abra o sistema (ou rode `python seed.py --verificar`) com um usuário que possa `ALTER`: a migração é automática. |
+
+### Python / instalação
+
+| O que aparece | Causa | Solução |
+|---|---|---|
+| `ModuleNotFoundError: No module named 'app.midia'` (ou outro `app.<nome>`) | A pasta `app\` está incompleta ou você não está na raiz do projeto. | Copie a pasta `app\` inteira e rode `python main.py` a partir da pasta que contém o `main.py`. |
+| `ModuleNotFoundError: No module named 'PIL'` / `'matplotlib'` / `'bcrypt'` / `'mysql'` / `'google_auth_oauthlib'` | O ambiente virtual não está ativo ou as dependências não foram instaladas. | `.\.venv\Scripts\Activate.ps1` e `pip install -r requirements.txt`. |
+| `No module named '_tkinter'` / `tkinter` | Python instalado sem Tkinter. | Reinstale o Python marcando *tcl/tk and IDLE* (Windows) ou `sudo apt install python3-tk` (Linux). |
+| *"a execução de scripts foi desabilitada neste sistema"* ao ativar o `.venv` | Política do PowerShell. | `Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass` e ative de novo. |
+| `python` não é reconhecido | Python fora do PATH. | Reinstale marcando *Add python.exe to PATH* ou use `py`. |
+| `PermissionError` em `logs/`, `midia/` ou `config/` | Projeto em pasta sem permissão de escrita. | Mova o projeto para uma pasta sua (Documentos, Downloads, `C:\Projetos`). |
+
+### Recursos opcionais
+
+| O que aparece | Causa | Solução |
+|---|---|---|
+| Aviso de e-mail não configurado (2FA / esqueci minha senha / e-mail de urgência) | Falta o `config/email_config.json` ou ele está incompleto. | Seção 3.5. |
+| Erro `access_denied` no login com o Google | App em modo de teste e seu e-mail não está na lista. | Adicione o e-mail em **Usuários de teste** (seção 3.6). |
+| Falta `config/client_secret.json` | Credenciais do Google não instaladas. | Seção 3.6. |
+| Capas e fotos não aparecem | Pillow não instalado, ou a pasta `midia/` deste PC não tem os arquivos. | `pip install pillow` e copie a pasta `midia\` junto com o backup (seção 4). |
+| O cabeçalho mostra "Banco de dados desconectado" | O servidor MySQL parou. | Ligue o servidor de novo (seção 3.3); o aviso some sozinho em até 30 segundos. |
+
+---
+
+## 6. Funcionalidades
+- **Login e cadastro** com layout editorial (protótipo do Stitch), usuário/e-mail
+  + senha com hash **bcrypt**.
+- **Verificação em duas etapas (2FA) por e-mail** (código de 6 dígitos, válido por
+  10 minutos, via SMTP) e **"Esqueci minha senha"** por código.
+- **Login com o Google** (OAuth 2.0), com criação automática da conta.
+- **E-mails com layout próprio** (HTML no estilo editorial, com logo opcional).
+- **Janela principal** com cabeçalho/masthead e navegação (Notícias, Categorias,
+  Autores, Gráficos), envelope de notificações, acesso ao Perfil pelo nome do
+  usuário e botão Sair.
+- **Notícias**: editor rápido, feed em cartões com busca, filtros (seção e
+  estado), ordenação e paginação, painel "Cadência da Tiragem" e leitura.
+- **Editor redacional completo** (botão "+ Nova matéria"): título, linha fina,
+  barra de formatação (negrito, itálico, sublinhado, intertítulos, citação,
+  link, listas, imagem, filete), contadores, ficha de rotativa (colunas,
+  legibilidade, tempo de leitura, embargo), capa com legenda e crédito,
+  etiquetas, auto-salvamento local e Salvar rascunho / Publicar. O texto usa
+  marcadores simples (`**negrito**`, `*itálico*`, `## intertítulo`, `> citação`).
+- **Página de leitura**: sumário "Nesta edição", texto formatado, capa,
+  bloco do autor, palavras-chave, leituras suplementares e exportação em HTML.
+- **Categorias e Autores**: cartões de resumo, busca, filtros, formulários,
+  paginação, fotos dos jornalistas, relatório CSV e bloqueio de exclusão de
+  quem tem matérias.
+- **Gráficos & Análise** (matplotlib embutido): indicadores com comparação com
+  o período anterior, distribuição por editoria, evolução, produtividade por
+  autor, volume por dia da semana, pipeline, leitura automática dos dados e
+  meta; filtros por período (inclusive personalizado), editoria, jornalista e
+  estado; exportação em **PDF** e **CSV**.
+- **Notificações**: painel lateral "Despachos & Notificações" (Todas / Não
+  lidas / Urgente), selo de não lidas, "lido" por usuário, atalho para o
+  assunto, histórico completo, alerta sonoro e e-mail para furos de reportagem.
+- **Perfil**: crachá com foto, dados biográficos, troca de senha com regras em
+  tempo real, 2FA e preferências do operador (alerta sonoro, e-mail de
+  urgência, revisão automática de redação e polegadas de coluna).
+- **Imagens** (capas, fotos, imagens no texto): copiadas para `midia/`.
+- Registro de eventos e erros em `logs/error.log`.
+
+## 7. Estrutura do projeto
+```
+News-Manager-main/
+├── main.py                        # Ponto de entrada — sempre rode a partir daqui
+├── seed.py                        # Dados de teste + verificação automática
+├── requirements.txt               # Dependências
+├── README.md
+├── ROTEIRO_DE_TESTE.md            # Roteiro do que conferir na tela
+├── .gitignore
+├── app/
+│   ├── gui.py                     # Login, cadastro, 2FA e janela principal
+│   ├── shell.py                   # Cabeçalho/masthead, navegação, abas e rodapé
+│   ├── database.py                # Conexão MySQL e consultas
+│   ├── auth.py                    # Hash de senha, 2FA por e-mail, login com Google
+│   ├── cadastros.py               # Regras de categorias e autores
+│   ├── noticias.py                # Regras do CRUD de notícias
+│   ├── notificacoes.py            # Notificações: eventos, leitura por usuário, e-mail
+│   ├── perfil.py                  # Regras do Perfil: dados, foto, senha, 2FA, preferências
+│   ├── estatisticas.py            # Consultas e indicadores da tela de Gráficos
+│   ├── graficos.py                # Gráficos do matplotlib e relatório em PDF
+│   ├── texto_rico.py              # Formatação do texto, estatísticas, revisão, exportação HTML
+│   ├── midia.py                   # Importação, redimensionamento e exibição de imagens
+│   ├── telas_cadastros.py         # Telas de Categorias e Autores
+│   ├── tela_noticias.py           # Tela de Notícias (editor rápido + feed)
+│   ├── tela_editor.py             # Editor redacional completo
+│   ├── tela_leitura.py            # Página de leitura da matéria
+│   ├── tela_graficos.py           # Tela Gráficos & Análise
+│   ├── tela_notificacoes.py       # Painel de notificações e histórico
+│   ├── tela_perfil.py             # Tela de Perfil
+│   ├── theme.py                   # Paleta e tipografia (estilo editorial)
+│   └── logger.py                  # Registro de eventos/erros
+├── config/
+│   ├── client_secret.json.example # Modelo das credenciais OAuth do Google
+│   └── email_config.json.example  # Modelo das credenciais SMTP
+│       (os arquivos de verdade, sem ".example", ficam aqui e nunca vão para o Git)
+├── sql/
+│   ├── schema.sql                 # Cria o banco "newsmanager" e as tabelas (do zero)
+│   ├── migration_auth.sql         # Migração da versão bem antiga (senha em texto puro)
+│   └── migration_totp_para_email.sql  # Migração de quem usava 2FA por TOTP/QR Code
+├── assets/logo.png                # Opcional — logo dos e-mails (crie a pasta se quiser usar)
+├── design/LayoutStitch/           # Opcional — protótipo de telas (referência visual)
+├── docs/  screenshots/            # Opcional — documentação e prints (se existirem no seu clone)
+└── (criados em uso, fora do Git) logs/  midia/  rascunhos/  config/graficos.json
+```
+
+## 8. Como funcionam o 2FA, o "esqueci minha senha" e os e-mails
+
+**2FA por e-mail**
+- No **Cadastro**, "Ativar verificação em duas etapas por e-mail" vem marcada;
+  o sistema envia um código de 6 dígitos e, ao digitá-lo, o 2FA fica ativo.
+- Dá para pular e ativar depois, no **Perfil → Módulo 02 (Segurança)**, que
+  também desativa o 2FA e troca a senha.
+- No login tradicional, contas com 2FA recebem um código por e-mail (há
+  "Reenviar código"). O código vale 10 minutos e só pode ser usado uma vez.
+- Contas que entram pelo **Google** não passam pelo 2FA do NewsManager: a
+  própria Conta Google autentica.
+
+**Esqueci minha senha**
+- No login, "Esqueceu a senha?" pede o usuário/e-mail, envia um código ao
+  e-mail cadastrado e, na segunda etapa, pede o código e a nova senha.
+- Contas criadas só pelo Google (sem senha local) recebem um aviso.
+- Por simplicidade, o sistema informa quando a conta não existe; em produção
+  o ideal seria uma mensagem genérica (vale citar na análise de segurança).
+
+**Layout e logo dos e-mails**
+- O layout fica em `app/auth.py` (`EmailSender._montar_html`).
+- Para usar um logo, coloque `assets/logo.png` (ou ajuste `LOGO_FILE` em
+  `app/auth.py`); sem o arquivo, o e-mail usa o logo em texto.
+
+## 9. Dados de teste e roteiro de testes
+```powershell
+python seed.py                  # popula o banco e roda as verificações
+python seed.py --verificar      # só confere, sem alterar nada
+python seed.py --recriar        # apaga o que o seed criou e cria tudo de novo
+python seed.py --limpar         # remove só os dados do seed (e as imagens deles)
+python seed.py --volume 300     # matérias extras para os gráficos (padrão 120)
+python seed.py --autosave       # cria um rascunho automático de exemplo (teste da recuperação)
+python seed.py --sem-imagens    # sem capas/fotos
+```
+O seed cria editorias, autores (com e sem foto), 18 matérias em todos os
+estados, matérias extras espalhadas pelos últimos 120 dias, despachos de
+exemplo e roda dezenas de verificações automáticas. Ele nunca mexe no que
+**você** cadastrou. Se algum item aparecer como `FALHA`, copie a saída do
+terminal. O `ROTEIRO_DE_TESTE.md` lista, tela por tela, o que conferir na
+janela real.
+
+## 10. Migrações de bancos antigos
+Só são necessárias para bancos criados por versões muito antigas do projeto.
+Para um banco novo, o `schema.sql` basta.
+
+- **Versão bem antiga** (tabela `usuarios` com `usuario`/`senha` em texto puro):
+  ```powershell
+  & "$mysql\mysql.exe" -u root --default-character-set=utf8mb4 newsmanager -e "source sql/migration_auth.sql"
+  ```
+- **Versão intermediária com 2FA por TOTP/QR Code** (colunas `totp_secret`/`totp_ativo`):
+  ```powershell
+  & "$mysql\mysql.exe" -u root --default-character-set=utf8mb4 newsmanager -e "source sql/migration_totp_para_email.sql"
+  ```
+
+Leia os comentários dentro de cada script. Como as senhas usam bcrypt
+(calculado em Python), depois de migrar da versão mais antiga o jeito mais
+simples é recriar os usuários pela tela **Criar conta**.
+
+## Ideias futuras
+- Previsão do tempo no cabeçalho (cidade escolhida no Perfil).
+- "Clipping" de matérias de agências por país/região, via RSS ou API de notícias.
