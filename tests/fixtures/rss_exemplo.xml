@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:media="http://search.yahoo.com/mrss/" xmlns:content="http://purl.org/rss/1.0/modules/content/">
+<channel>
+  <title>Jornal Exemplo — Política</title>
+  <link>https://jornal.exemplo.com.br/politica/</link>
+  <description>Feed de exemplo (estrutura de RSS 2.0, conteúdo fictício)</description>
+  <item>
+    <title>Câmara aprova projeto da reforma tributária em votação apertada</title>
+    <link>https://jornal.exemplo.com.br/politica/2026/10/camara-aprova-reforma.html</link>
+    <guid isPermaLink="false">exemplo-politica-0001</guid>
+    <pubDate>Wed, 28 Oct 2026 10:15:00 -0300</pubDate>
+    <dc:creator>Maria da Conceição</dc:creator>
+    <description><![CDATA[<p>O plenário aprovou, por 262 votos a 210, o texto-base. <b>Ação</b> do governo &amp; da oposição marcou a sessão.</p><img src="https://img.exemplo.com.br/foto1.jpg" width="1"/>]]></description>
+    <media:content url="https://img.exemplo.com.br/capa1.jpg" medium="image"/>
+  </item>
+  <item>
+    <title><![CDATA[Ministro diz que “não há crise” no setor elétrico]]></title>
+    <link>https://jornal.exemplo.com.br/politica/2026/10/ministro-setor-eletrico.html</link>
+    <pubDate>Tue, 27 Oct 2026 22:40:00 GMT</pubDate>
+    <description>Resumo com entidades escapadas: &lt;p&gt;Segundo o ministro, o abastecimento est&amp;aacute; garantido&lt;/p&gt;&amp;nbsp;at&amp;eacute; o fim do ano.</description>
+  </item>
+  <item>
+    <title>Item sem data nem guid: o link vira o identificador</title>
+    <link>https://jornal.exemplo.com.br/politica/2026/10/sem-data.html</link>
+    <description>Sem data publicada.</description>
+  </item>
+  <item>
+    <title>Link perigoso deve ser descartado</title>
+    <link>javascript:alert(1)</link>
+    <description>não deve entrar</description>
+  </item>
+  <item>
+    <title>Duplicado do primeiro (mesmo guid)</title>
+    <link>https://jornal.exemplo.com.br/politica/2026/10/duplicado.html</link>
+    <guid isPermaLink="false">exemplo-politica-0001</guid>
+  </item>
+  <item>
+    <link>https://jornal.exemplo.com.br/politica/2026/10/sem-titulo.html</link>
+  </item>
+  <item>
+    <title>Esporte também aparece: Inter vence o Grêmio no Gre-Nal por 2 a 1</title>
+    <link>/esporte/2026/10/gre-nal.html</link>
+    <guid>https://jornal.exemplo.com.br/esporte/2026/10/gre-nal.html</guid>
+    <pubDate>Mon, 26 Oct 2026 21:00:00 -0300</pubDate>
+    <content:encoded><![CDATA[<div><p>Clássico <i>Gre-Nal</i> terminou com vitória colorada no Beira-Rio.</p><script>var x=1;</script><style>.a{}</style></div>]]></content:encoded>
+  </item>
+</channel>
+</rss>

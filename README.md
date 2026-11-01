@@ -16,6 +16,8 @@ com Tkinter e banco de dados MySQL (ou MariaDB, como o do XAMPP).
 8. [Como funcionam o 2FA, o "esqueci minha senha" e os e-mails](#8-como-funcionam-o-2fa-o-esqueci-minha-senha-e-os-e-mails)
 9. [Dados de teste e roteiro de testes](#9-dados-de-teste-e-roteiro-de-testes)
 10. [Migrações de bancos antigos](#10-migrações-de-bancos-antigos)
+11. [Previsão do tempo e Clipping: internet, atribuição, configuração](#11-previsão-do-tempo-e-clipping)
+12. [Testes automatizados](#12-testes-automatizados)
 
 ---
 
@@ -349,7 +351,7 @@ o seed e o backup existem.
 - **Login com o Google** (OAuth 2.0), com criação automática da conta.
 - **E-mails com layout próprio** (HTML no estilo editorial, com logo opcional).
 - **Janela principal** com cabeçalho/masthead e navegação (Notícias, Categorias,
-  Autores, Gráficos), envelope de notificações, acesso ao Perfil pelo nome do
+  Autores, Gráficos, Clipping), previsão do tempo clicável na faixa superior, envelope de notificações, acesso ao Perfil pelo nome do
   usuário e botão Sair.
 - **Notícias**: editor rápido, feed em cartões com busca, filtros (seção e
   estado), ordenação e paginação, painel "Cadência da Tiragem" e leitura.
@@ -375,6 +377,14 @@ o seed e o backup existem.
 - **Perfil**: crachá com foto, dados biográficos, troca de senha com regras em
   tempo real, 2FA e preferências do operador (alerta sonoro, e-mail de
   urgência, revisão automática de redação e polegadas de coluna).
+- **Previsão do tempo**: a faixa superior mostra `CIDADE • 21°C CÉU LIMPO` (clique para abrir
+  o "Caderno de Meteorologia": agora, próximas 24 h com gráfico, 7 dias, detalhes e alertas
+  da redação). Cidade por usuário (tela do tempo ou Perfil), localização por IP só com
+  consentimento, cache e modo offline. Dados: Open-Meteo.com.
+- **Clipping**: importa notícias do dia de jornais escolhidos a partir de feeds RSS/Atom oficiais,
+  com filtros, prévia, importação como pauta (`em_pauta`, nunca publicada), importações salvas
+  (inclusive automática 1×/dia), histórico, teste de fontes e feed próprio. Matérias importadas
+  trazem atribuição e o selo "Conteúdo externo".
 - **Imagens** (capas, fotos, imagens no texto): copiadas para `midia/`.
 - Registro de eventos e erros em `logs/error.log`.
 
@@ -387,6 +397,7 @@ News-Manager-main/
 ├── README.md
 ├── ROTEIRO_DE_TESTE.md            # Roteiro do que conferir na tela
 ├── .gitignore
+├── tests/                         # Testes automatizados (unittest) e tests/fixtures/
 ├── app/
 │   ├── gui.py                     # Login, cadastro, 2FA e janela principal
 │   ├── shell.py                   # Cabeçalho/masthead, navegação, abas e rodapé
@@ -406,12 +417,21 @@ News-Manager-main/
 │   ├── tela_leitura.py            # Página de leitura da matéria
 │   ├── tela_graficos.py           # Tela Gráficos & Análise
 │   ├── tela_notificacoes.py       # Painel de notificações e histórico
-│   ├── tela_perfil.py             # Tela de Perfil
+│   ├── tela_perfil.py             # Tela de Perfil (inclui a cidade da previsão)
+│   ├── rede.py                    # Acesso à internet (timeout, User-Agent, erros em português)
+│   ├── segundo_plano.py           # Roda rede em thread e devolve à tela com after()
+│   ├── tempo.py                   # Previsão do tempo: Open-Meteo, cache, alertas, cidades, IP
+│   ├── graficos_tempo.py          # Gráfico de 24 h (matplotlib)
+│   ├── tela_tempo.py              # Faixa/atualizador e tela "Previsão do Tempo"
+│   ├── feeds.py                   # Parser seguro de RSS 2.0 / RSS 1.0 / Atom
+│   ├── clipping.py                # Catálogo, coleta, filtros, importação, importações salvas
+│   ├── tela_clipping.py           # Tela Clipping
 │   ├── theme.py                   # Paleta e tipografia (estilo editorial)
 │   └── logger.py                  # Registro de eventos/erros
 ├── config/
 │   ├── client_secret.json.example # Modelo das credenciais OAuth do Google
-│   └── email_config.json.example  # Modelo das credenciais SMTP
+│   ├── email_config.json.example  # Modelo das credenciais SMTP
+│   └── fontes_noticias.json       # Catálogo de jornais/feeds do Clipping (sem segredos; VERSIONADO)
 │       (os arquivos de verdade, sem ".example", ficam aqui e nunca vão para o Git)
 ├── sql/
 │   ├── schema.sql                 # Cria o banco "newsmanager" e as tabelas (do zero)
@@ -456,10 +476,14 @@ python seed.py --limpar         # remove só os dados do seed (e as imagens dele
 python seed.py --volume 300     # matérias extras para os gráficos (padrão 120)
 python seed.py --autosave       # cria um rascunho automático de exemplo (teste da recuperação)
 python seed.py --sem-imagens    # sem capas/fotos
+python seed.py --verificar-rede # testa AO VIVO os feeds do Clipping e a API do tempo (OK/FALHA por fonte)
+python seed.py --verificar-rede --com-ip   # idem, e testa também a localização por IP
 ```
 O seed cria editorias, autores (com e sem foto), 18 matérias em todos os
 estados, matérias extras espalhadas pelos últimos 120 dias, despachos de
-exemplo e roda dezenas de verificações automáticas. Ele nunca mexe no que
+exemplo e roda dezenas de verificações automáticas — inclusive as de Previsão do tempo e Clipping, feitas
+**offline** com os arquivos de `tests/fixtures/` (os dados temporários que elas criam são removidos
+no fim). `--verificar-rede` não usa o banco e precisa de internet. Ele nunca mexe no que
 **você** cadastrou. Se algum item aparecer como `FALHA`, copie a saída do
 terminal. O `ROTEIRO_DE_TESTE.md` lista, tela por tela, o que conferir na
 janela real.
@@ -482,5 +506,78 @@ Leia os comentários dentro de cada script. Como as senhas usam bcrypt
 simples é recriar os usuários pela tela **Criar conta**.
 
 ## Ideias futuras
-- Previsão do tempo no cabeçalho (cidade escolhida no Perfil).
-- "Clipping" de matérias de agências por país/região, via RSS ou API de notícias.
+- Fontes de notícias por API (GNews, NewsData.io...) como complemento opcional, com chave em `config/`.
+- Resumo do clipping por e-mail.
+
+## 11. Previsão do tempo e Clipping
+**Nada novo para instalar:** só `requests` e `matplotlib`, que já estão no `requirements.txt`. As tabelas
+novas e as colunas `fonte_*` de `noticias` são criadas **sozinhas** ao abrir o programa (e estão no
+`sql/schema.sql` para instalações novas). Sem internet o programa continua funcionando: o tempo mostra o
+último dado guardado (ou `SEM PREVISÃO`) e o Clipping permite ver os itens já coletados.
+
+### Previsão do tempo
+- **Fonte:** [Open-Meteo.com](https://open-meteo.com/), sem chave. Termos conferidos em 28/10/2026: uso
+  gratuito apenas **não comercial**, abaixo de 10.000 chamadas/dia (5.000/hora, 600/minuto); dados sob
+  **CC BY 4.0** com atribuição visível ("Dados meteorológicos: Open-Meteo.com (CC BY 4.0)", no rodapé da tela).
+  O programa consulta uma vez a cada ~25 min e reaproveita o cache por 20 min.
+- **Cidade** (ordem): cidade salva do usuário → (perguntado **uma vez**) localização aproximada pelo IP →
+  busca por nome → cidade padrão **Santa Maria, RS** (constante `CIDADE_PADRAO` em `app/tempo.py`; troque lá).
+  A cidade se muda na tela do tempo ou no **Perfil** (mesma preferência, por usuário).
+- **IP:** só com o seu "sim". O IP vai ao serviço de terceiros **ipapi.co** (gratuito, HTTPS, sem chave,
+  cerca de 1.000 consultas/dia). Recusou? Fica registrado e não perguntamos de novo.
+- **Alertas da redação:** limites em `LIMITES_ALERTA` (`app/tempo.py`): chuva ≥ 70%, vento ≥ 40 km/h,
+  UV ≥ 8, calor ≥ 35 °C, frio ≤ 5 °C, mais aviso de tempestade.
+
+### Clipping
+- **Fontes:** feeds RSS/Atom listados em `config/fontes_noticias.json` (sem segredos, versionado). Não há
+  raspagem de páginas. Cada feed tem `verificacao`: `indireta` = endereço visto em diretório de terceiros em
+  28/10/2026 (não aberto ao vivo na página oficial do jornal); `nao_verificada` = endereço conhecido, mas não
+  confirmado (a fonte vem **desativada**). Estadão, UOL, Correio do Povo e GZH estão **sem feed**: cole o
+  endereço oficial em *Fontes → Adicionar feed próprio*. Use **Testar fontes** (ou `python seed.py
+  --verificar-rede`) para conferir tudo na sua rede.
+- **O que é importado:** título, resumo curto do feed, data, link e nome do jornal. Não republicamos o
+  texto completo e **não baixamos imagens**. A matéria leva `Fonte: [Jornal](link)` no texto, os campos
+  `fonte_nome/fonte_url/fonte_guid` e o selo **Conteúdo externo** no cartão e na leitura. Entra como
+  **Em Pauta** (ou Rascunho/Revisão); **publicar sozinho é recusado**. O autor é "Clipping — <jornal>".
+- **Boas maneiras com os servidores:** User-Agent identificável, no máximo **1 coleta por feed a cada
+  15 minutos** (dentro disso a prévia usa o que já foi coletado), 4 conexões no total e 2 por servidor,
+  timeout de 10 s, 2 tentativas, ETag/Last-Modified. Aviso fixo na tela: *conteúdo de terceiros — confira
+  os termos de uso de cada jornal*.
+- **Filtros:** jornais e seções, palavras que devem aparecer (basta uma; `econom*` = curinga) e que não
+  devem, período, máximo por jornal, só com imagem, ocultar já importados, ordem. Itens repetidos (mesmo
+  guid ou mesmo link) aparecem uma vez, e o que já foi importado nunca é importado de novo.
+- **Importações salvas:** guardam um conjunto de filtros com nome; *Rodar agora*, editar, excluir; a opção
+  **automática** roda 1 vez por dia, em segundo plano, ao abrir o programa, e deixa um aviso-resumo.
+- **Editoria:** sugerida pela seção do feed e por palavras do título/resumo (política, esportes,
+  tecnologia, economia, mundo, cultura, saúde) e ajustável; só usa editorias que **já existem**.
+- **Segurança do XML:** documentos com `<!ENTITY>` ou DOCTYPE com subconjunto interno são rejeitados
+  (por isso não precisamos do `defusedxml`); só links http/https; resumos têm as tags removidas.
+
+### Solução de problemas de rede
+| Sintoma | O que fazer |
+|---|---|
+| "Sem conexão com a internet ou servidor inacessível" | Teste o navegador; em rede de faculdade/empresa configure o proxy: `$env:HTTPS_PROXY="http://proxy.suaescola.br:3128"` e `$env:HTTP_PROXY=...` no PowerShell **antes** de rodar `python main.py`. |
+| "Falha de certificado/SSL" | A rede intercepta conexões seguras. Peça o certificado ao suporte e use `$env:REQUESTS_CA_BUNDLE="C:\caminho\certificado.pem"`. |
+| Um feed dá 404 | O jornal mudou/descontinuou o feed. Desative-o na aba Fontes ou cole o endereço novo em "Adicionar feed próprio". |
+| "O endereço devolveu uma página HTML" | O link não é de um feed RSS/Atom (procure o ícone/página "RSS" do jornal). |
+| Muitas requisições (429) | Aguarde; o programa já espaça as coletas. |
+| `SEM PREVISÃO` na faixa | Sem internet e sem cache. Abra a tela do tempo e use **Atualizar** quando voltar a conexão. |
+
+## 12. Testes automatizados
+O repositório agora tem `tests/` (biblioteca padrão `unittest`, **sem pytest, sem internet, sem MySQL e sem
+janela real**). Na pasta do projeto:
+```powershell
+python -m unittest discover -s tests -t . -v
+```
+- `test_tempo.py`: códigos WMO, regras de alerta, leitura da fixture JSON do Open-Meteo, cache/TTL, falhas
+  de rede, busca de cidades, localização por IP, cidade por usuário e o atualizador (sem Tk).
+- `test_feeds.py`: parser RSS/Atom (acentos, Latin-1, HTML, datas, segurança do XML).
+- `test_clipping.py`: filtros (incluir/excluir/período/limite), deduplicação, mapeamento seção→editoria,
+  coleta com falhas parciais, intervalo de 15 min, GET condicional, criação das matérias com atribuição,
+  importações salvas e automática.
+- `test_telas.py`: monta e exercita as telas novas com um **Tk de mentira** (`tests/_tkfalso.py`); é uma
+  simulação que acha erros de lógica, **não** valida aparência nem eventos reais.
+- Os serviços rodam num **SQLite em memória** (`tests/_ambiente.py`): a lógica é testada, mas o SQL específico
+  de MySQL/MariaDB (ex.: `INSERT IGNORE`, `AUTO_INCREMENT`) **não** — confira com `python seed.py --verificar`.
+- As fixtures de RSS/Atom em `tests/fixtures/` seguem a estrutura real desses formatos, mas o conteúdo é
+  **fictício** (feito à mão, com acentos, HTML, CDATA e casos de erro).

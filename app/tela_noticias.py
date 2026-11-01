@@ -433,6 +433,8 @@ class NoticiasFrame(_TelaBase):
         tk.Label(corpo, text=f"{data_extenso_curta(n['data_publicacao'])} • {n['categoria'].upper()}",
                  fg=suave, bg=fundo, font=t.Fontes.corpo(7, "bold"), anchor="w",
                  justify="left", wraplength=280).pack(anchor="w")
+        if n.get("fonte_nome"):   # matéria importada por clipping: sempre marcada como conteúdo externo
+            _etiqueta(corpo, f"Conteúdo externo • {n['fonte_nome']}", suave, fundo, tamanho=7).pack(anchor="w", pady=(6, 0))
         tk.Label(corpo, text=n["titulo"], fg=texto, bg=fundo, font=t.Fontes.display(14),
                  anchor="w", justify="left", wraplength=280).pack(anchor="w", pady=(6, 4))
         resumo = _resumir(n["subtitulo"] or texto_simples(n["resumo"]), 140) or "Sem texto ainda."
@@ -464,7 +466,7 @@ class NoticiasFrame(_TelaBase):
         acoes = tk.Frame(rodape, bg=fundo)
         acoes.pack(side="right")
         cor_link = TEXTO_INVERSO if destaque else t.SECONDARY
-        _link(acoes, "EDITAR", lambda i=n["id"]: self._editar(i), cor_link).pack(side="left")
+        _link(acoes, "EDITAR", lambda i=n["id"]: self._editar_do_cartao(i), cor_link).pack(side="left")
         _link(acoes, "LER", lambda x=n: self._ler(x), cor_link).pack(side="left", padx=(8, 0))
         _link(acoes, "EXCLUIR", lambda x=n: self._excluir_do_feed(x),
               "#FF9D95" if destaque else t.ERROR).pack(side="left", padx=(8, 0))
@@ -506,6 +508,14 @@ class NoticiasFrame(_TelaBase):
         """Chamado pelo botão '+ Nova matéria' do cabeçalho."""
         self._limpar_form()
         self.campo_titulo.focus()
+
+    def _editar_do_cartao(self, noticia_id):
+        """EDITAR no cartão abre a matéria no editor completo (antes carregava o editor rápido, que fica
+        fora da vista e parecia que o botão não fazia nada). Sem editor completo, usa o rápido."""
+        if self.ao_editar_completo:
+            self.ao_editar_completo(noticia_id, None)
+        else:
+            self._editar(noticia_id)
 
     def _editar(self, noticia_id):
         resultado = self.servico.obter(noticia_id)
@@ -566,7 +576,7 @@ class NoticiasFrame(_TelaBase):
     def _atualizar(self):
         if self._id_edicao is None:
             messagebox.showwarning(
-                "Notícias", "Clique em EDITAR num cartão do feed para escolher a matéria a atualizar.")
+                "Notícias", "Para alterar uma matéria existente, clique em EDITAR no cartão dela no feed (abre o editor completo).")
             return
         self._concluir(self.servico.atualizar(self._id_edicao, **self._dados_form()))
 

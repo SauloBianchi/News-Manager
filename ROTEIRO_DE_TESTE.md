@@ -163,7 +163,51 @@ Depois de rodar `python seed.py`, o painel já tem 8 despachos de exemplo (1 urg
 - [ ] Fechar e reabrir o programa mantém as preferências.
 - [ ] **Sair do sistema** (cartão lateral) volta ao login.
 
-## 10. Limpeza
+## 10. Previsão do tempo (faixa superior e tela maior)
+
+Precisa de internet. Para testar o modo offline, desligue o Wi-Fi/cabo na hora indicada.
+
+- [ ] Ao abrir o programa pela primeira vez (usuário sem cidade salva) aparece **uma** pergunta sobre usar a localização aproximada pelo IP, avisando que o IP vai a um serviço de terceiros.
+  - [ ] **Não**: a faixa usa **SANTA MARIA** e a pergunta não volta ao fechar e reabrir.
+  - [ ] **Sim**: a cidade é descoberta (pode ser só aproximada) e fica salva. Se falhar, aparece um aviso e a cidade padrão é usada.
+- [ ] No meio da faixa superior aparece `CIDADE • 21°C CÉU LIMPO` (com um símbolo à frente), com cursor de mão; enquanto carrega mostra `…`.
+- [ ] A janela **não trava** durante a busca (arraste-a e navegue entre as abas enquanto carrega).
+- [ ] Clicar na faixa abre o **Caderno de Meteorologia**; o item de menu em destaque é o da tela de onde você veio; **← Voltar** retorna a ela.
+- [ ] Tela maior: **Agora** (temperatura grande, condição, sensação, máx/mín), **Alertas da redação**, **Próximas 24 horas** (faixa e gráfico), **7 dias** (tabela), **Detalhes** (umidade, vento km/h + direção, pressão, UV, nascer e pôr do sol).
+- [ ] Carimbo `ATUALIZADO ÀS HH:MM`; **Atualizar** refaz a busca.
+- [ ] Rodapé "Dados meteorológicos: Open-Meteo.com (CC BY 4.0)" visível; clicar abre o site no navegador.
+- [ ] **Buscar outra cidade…**: digite "Porto Alegre", escolha na lista (aparecem cidade, estado e país), confirme: a faixa muda **na hora** e o nome aparece na tela.
+- [ ] **Usar localização aproximada (por IP)** mostra de novo o aviso de privacidade e só segue com "Sim".
+- [ ] **Perfil → Módulo 03 → Cidade → Escolher cidade…** troca a mesma cidade (faixa e tela do tempo acompanham). Fechar e reabrir mantém a escolha; outro usuário não é afetado.
+- [ ] **Offline:** com a tela do tempo aberta e a conexão desligada, **Atualizar** mantém o último dado com a nota "dado em cache"/hora do dado; a faixa mostra `(DADO DE HH:MM)`. Ainda offline, troque para uma cidade nunca consultada (a troca em si pode falhar na busca de cidades; use uma que já esteja salva, ou teste com a conexão desligada antes da primeira abertura): sem cache, a faixa mostra `SEM PREVISÃO`, sem erro nem travamento.
+- [ ] Religando a internet, em até ~25 minutos (ou ao clicar em Atualizar) o dado volta a ser atual sozinho.
+- [ ] (Opcional) **Criar pauta do tempo** abre o editor com um rascunho (título e texto com a previsão e a fonte).
+- [ ] Alertas: se algum limite for ultrapassado (chuva ≥ 70%, vento ≥ 40 km/h, UV ≥ 8, ≥ 35 °C, ≤ 5 °C) aparece o texto em português; senão, "Nenhum alerta".
+
+## 11. Clipping (notícias de jornais)
+
+Precisa de internet. Se algo falhar, rode `python seed.py --verificar-rede` e veja a seção "Solução de problemas de rede" do README.
+
+- [ ] O menu tem o item **Clipping**; o aviso "Conteúdo de terceiros — confira os termos de uso de cada jornal" aparece no topo.
+- [ ] Aba **FONTES**: G1 e Agência Brasil vêm ativos; Folha, BBC, DW, Guardian etc. vêm **desativados** e com a marca "NÃO verificada"; Estadão, UOL, Correio do Povo e GZH estão sem feed.
+- [ ] **Testar fontes**: cada feed ativo mostra OK/FALHA com o motivo (um feed fora do ar não atrapalha os outros). Ative uma fonte "não verificada", teste de novo e veja se funciona na sua rede.
+- [ ] **Adicionar feed próprio**: um link que não é feed (ex.: `https://www.google.com`) é recusado com mensagem clara; um endereço RSS/Atom válido é aceito e aparece na lista (com **Remover**).
+- [ ] **NOVA BUSCA**: marque jornais/seções, escolha período e máximo por jornal e clique **Buscar agora**: aparecem linhas com jornal, seção, título, resumo, data, "Abrir na fonte" e editoria sugerida. A janela não trava.
+- [ ] Filtros: "palavras que devem aparecer" (ex.: `governo, economia`) só deixa itens com uma delas (sem diferenciar acento/maiúscula; `econom*` pega variações); "palavras que NÃO devem aparecer" tira itens; "Somente com imagem" e o período funcionam.
+- [ ] Buscar de novo em menos de 15 minutos **não** faz novas requisições (os mesmos itens voltam, sem duplicar).
+- [ ] **Selecionar todos** e seleção individual funcionam, inclusive entre páginas.
+- [ ] **Importar selecionadas** (estado "Em Pauta"): aparece o resumo ("N importada(s), M já existia(m), K fonte(s) com erro"); em **Notícias** as matérias estão **Em Pauta** (nenhuma publicada), com o selo **Conteúdo externo • Jornal** no cartão, autor "Clipping — Jornal", texto com `Fonte: [Jornal](link)` clicável e, na leitura, o selo e o link da fonte.
+- [ ] Importar as mesmas matérias de novo não duplica; na prévia elas ficam ocultas (ou marcadas **JÁ IMPORTADO** se desmarcar "Ocultar já importados").
+- [ ] O sino ganha **um** aviso-resumo "Clipping: N matérias em pauta" (não um por matéria).
+- [ ] Editoria **Automática** coloca cada matéria numa editoria coerente; escolher uma editoria fixa vale para todas.
+- [ ] **Salvar filtros…**: dê um nome (ex.: "Política do dia – G1 + Folha"); em **IMPORTAÇÕES SALVAS** aparece com resumo e última execução. **Editar** carrega os filtros e salva por cima; **Excluir** pede confirmação.
+- [ ] **Rodar agora** busca, importa só o novo e mostra o resultado; repetir não duplica.
+- [ ] **Automática:** salve uma importação com a caixa "Importar automaticamente 1 vez por dia" marcada, feche e abra o programa: ela roda sozinha em segundo plano (aba HISTÓRICO mostra origem "Automática") e deixa um aviso no sino; abrir de novo no mesmo dia **não** repete.
+- [ ] **HISTÓRICO** lista as últimas importações (quando, origem, quantas, falhas).
+- [ ] Com a internet desligada: **Buscar agora** mostra as falhas com mensagem compreensível (e, se havia itens coletados, a prévia deles), sem erro nem travamento.
+- [ ] `python seed.py --verificar` (sem internet) passa as verificações de "Previsão do tempo e Clipping" e não deixa dados de teste no banco.
+
+## 12. Limpeza
 
 - [ ] `python seed.py --limpar` remove as matérias, autores, editorias e **imagens** do seed; o que você criou continua lá.
 - [ ] A pasta `midia/` não fica com arquivos soltos (rode `python seed.py --verificar` antes de limpar: ele avisa se houver imagens órfãs).

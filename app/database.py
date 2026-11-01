@@ -148,6 +148,71 @@ class DatabaseManager:
                valor VARCHAR(255) NOT NULL,
                PRIMARY KEY (usuario_id, chave)
            )""",
+        """CREATE TABLE IF NOT EXISTS tempo_cache (
+               chave VARCHAR(40) NOT NULL PRIMARY KEY,
+               atualizado_em DATETIME NOT NULL,
+               payload MEDIUMTEXT NOT NULL
+           )""",
+        """CREATE TABLE IF NOT EXISTS clipping_itens (
+               id INT AUTO_INCREMENT PRIMARY KEY,
+               fonte_chave VARCHAR(60) NOT NULL,
+               secao VARCHAR(80) NULL,
+               guid VARCHAR(255) NOT NULL,
+               url VARCHAR(1000) NOT NULL,
+               titulo VARCHAR(500) NOT NULL,
+               resumo TEXT NULL,
+               autor_fonte VARCHAR(200) NULL,
+               publicado_em DATETIME NULL,
+               imagem_url VARCHAR(1000) NULL,
+               coletado_em DATETIME NOT NULL,
+               importado_noticia_id INT NULL,
+               UNIQUE KEY uq_clipping_fonte_guid (fonte_chave, guid)
+           )""",
+        """CREATE TABLE IF NOT EXISTS importacoes_salvas (
+               id INT AUTO_INCREMENT PRIMARY KEY,
+               usuario_id INT NOT NULL,
+               nome VARCHAR(120) NOT NULL,
+               fontes TEXT NOT NULL,
+               secoes TEXT NULL,
+               palavras_incluir VARCHAR(500) NULL,
+               palavras_excluir VARCHAR(500) NULL,
+               periodo_horas INT NOT NULL DEFAULT 24,
+               limite_por_fonte INT NOT NULL DEFAULT 10,
+               so_com_imagem TINYINT(1) NOT NULL DEFAULT 0,
+               ordem VARCHAR(20) NOT NULL DEFAULT 'recentes',
+               categoria_id INT NULL,
+               autor_id INT NULL,
+               status_destino VARCHAR(20) NOT NULL DEFAULT 'em_pauta',
+               automatica TINYINT(1) NOT NULL DEFAULT 0,
+               ultima_execucao DATETIME NULL
+           )""",
+        """CREATE TABLE IF NOT EXISTS clipping_historico (
+               id INT AUTO_INCREMENT PRIMARY KEY,
+               usuario_id INT NULL,
+               quando DATETIME NOT NULL,
+               origem VARCHAR(20) NOT NULL,
+               nome VARCHAR(120) NULL,
+               importadas INT NOT NULL DEFAULT 0,
+               existentes INT NOT NULL DEFAULT 0,
+               falhas INT NOT NULL DEFAULT 0,
+               fontes VARCHAR(500) NULL
+           )""",
+        """CREATE TABLE IF NOT EXISTS clipping_feeds_estado (
+               chave CHAR(40) NOT NULL PRIMARY KEY,
+               url VARCHAR(1000) NOT NULL,
+               etag VARCHAR(255) NULL,
+               last_modified VARCHAR(100) NULL,
+               ultima_coleta DATETIME NULL,
+               ultimo_status VARCHAR(255) NULL
+           )""",
+        """CREATE TABLE IF NOT EXISTS clipping_feeds_proprios (
+               id INT AUTO_INCREMENT PRIMARY KEY,
+               usuario_id INT NOT NULL,
+               nome VARCHAR(100) NOT NULL,
+               url VARCHAR(500) NOT NULL,
+               secao VARCHAR(80) NULL,
+               criado_em DATETIME NOT NULL
+           )""",
     )
 
     def garantir_esquema(self):
@@ -189,6 +254,10 @@ class DatabaseManager:
             ("usuarios", "foto", "VARCHAR(255) NULL"),
             ("usuarios", "atualizado_em", "DATETIME NULL"),
             ("usuarios", "atualizado_por", "VARCHAR(150) NULL"),
+            # matérias importadas por clipping (conteúdo externo); nulas nas matérias normais
+            ("noticias", "fonte_nome", "VARCHAR(120) NULL"),
+            ("noticias", "fonte_url", "VARCHAR(1000) NULL"),
+            ("noticias", "fonte_guid", "VARCHAR(255) NULL"),
         ]
         for ddl in self._TABELAS_EXTRAS:
             self._executar(ddl, commit=True)
@@ -359,7 +428,8 @@ class DatabaseManager:
                            n.categoria_id, c.nome AS categoria, c.cor AS categoria_cor,
                            n.autor_id, a.nome AS autor, a.foto AS autor_foto, n.status, n.destaque,
                            n.etiquetas, n.leituras, n.data_publicacao,
-                           n.imagem, n.imagem_legenda, n.imagem_credito
+                           n.imagem, n.imagem_legenda, n.imagem_credito,
+                           n.fonte_nome, n.fonte_url
                     FROM noticias n
                     JOIN categorias c ON c.id = n.categoria_id
                     JOIN autores a ON a.id = n.autor_id
@@ -388,7 +458,8 @@ class DatabaseManager:
                       c.nome AS categoria, c.cor AS categoria_cor, n.autor_id, a.nome AS autor,
                       a.cargo AS autor_cargo, a.foto AS autor_foto, n.status, n.destaque,
                       n.etiquetas, n.leituras, n.data_publicacao,
-                      n.imagem, n.imagem_legenda, n.imagem_credito
+                      n.imagem, n.imagem_legenda, n.imagem_credito,
+                      n.fonte_nome, n.fonte_url, n.fonte_guid
                FROM noticias n
                JOIN categorias c ON c.id = n.categoria_id
                JOIN autores a ON a.id = n.autor_id
@@ -399,15 +470,19 @@ class DatabaseManager:
 
     def criar_noticia(self, titulo, conteudo, categoria_id, autor_id, data_publicacao,
                       subtitulo=None, status="publicado", destaque=False, etiquetas=None,
-                      imagem=None, imagem_legenda=None, imagem_credito=None):
-        """Insere a matéria e devolve o id gerado. Lança ErroBanco em caso de falha."""
+                      imagem=None, imagem_legenda=None, imagem_credito=None,
+                      fonte_nome=None, fonte_url=None, fonte_guid=None):
+        """Insere a matéria e devolve o id gerado. Lança ErroBanco em caso de falha.
+        fonte_* só são preenchidos em matérias importadas por clipping (conteúdo externo)."""
         r = self._rodar(
             """INSERT INTO noticias (titulo, subtitulo, conteudo, categoria_id, autor_id,
                                      data_publicacao, status, destaque, etiquetas,
-                                     imagem, imagem_legenda, imagem_credito)
-               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+                                     imagem, imagem_legenda, imagem_credito,
+                                     fonte_nome, fonte_url, fonte_guid)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
             (titulo, subtitulo, conteudo, categoria_id, autor_id, data_publicacao,
-             status, 1 if destaque else 0, etiquetas, imagem, imagem_legenda, imagem_credito),
+             status, 1 if destaque else 0, etiquetas, imagem, imagem_legenda, imagem_credito,
+             fonte_nome, fonte_url, fonte_guid),
             commit=True,
         )
         return r["id"]
@@ -917,3 +992,142 @@ class DatabaseManager:
                    GROUP BY c.nome
                    ORDER BY total DESC"""
         return self._executar(query, fetch=True) or []
+
+    # ---------- Previsão do tempo: cache ----------
+    def obter_cache_tempo(self, chave):
+        linhas = self._rodar("SELECT atualizado_em, payload FROM tempo_cache WHERE chave = %s", (chave,), fetch=True)
+        return linhas[0] if linhas else None
+
+    def salvar_cache_tempo(self, chave, payload, quando):
+        self._rodar("DELETE FROM tempo_cache WHERE chave = %s", (chave,), commit=True)
+        self._rodar("INSERT INTO tempo_cache (chave, atualizado_em, payload) VALUES (%s, %s, %s)",
+                    (chave, quando, payload), commit=True)
+
+    # ---------- Clipping: itens coletados ----------
+    def inserir_itens_clipping(self, itens, coletado_em) -> int:
+        """Grava os itens novos (os que já existem por fonte+guid são ignorados). Devolve quantos entraram."""
+        novos = 0
+        for i in range(0, len(itens), 40):
+            bloco = itens[i:i + 40]
+            valores = ", ".join(["(%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"] * len(bloco))
+            params = []
+            for it in bloco:
+                params += [it["fonte_chave"], it.get("secao"), it["guid"], it["url"], it["titulo"], it.get("resumo"),
+                           it.get("autor_fonte"), it.get("publicado_em"), it.get("imagem_url"), coletado_em]
+            r = self._rodar(
+                "INSERT IGNORE INTO clipping_itens (fonte_chave, secao, guid, url, titulo, resumo, autor_fonte, "
+                "publicado_em, imagem_url, coletado_em) VALUES " + valores, tuple(params), commit=True)
+            novos += max(0, r["linhas"] or 0)
+        return novos
+
+    def listar_itens_clipping(self, fontes, desde, limite=3000):
+        """Itens das fontes desde certa data, com `noticia_id` preenchido se a matéria importada ainda existe."""
+        if not fontes:
+            return []
+        marcas = ", ".join(["%s"] * len(fontes))
+        return self._rodar(
+            f"""SELECT i.id, i.fonte_chave, i.secao, i.guid, i.url, i.titulo, i.resumo, i.autor_fonte,
+                       i.publicado_em, i.imagem_url, i.coletado_em, i.importado_noticia_id,
+                       n.id AS noticia_id
+                FROM clipping_itens i
+                LEFT JOIN noticias n ON n.id = i.importado_noticia_id
+                WHERE i.fonte_chave IN ({marcas})
+                  AND (i.publicado_em >= %s OR (i.publicado_em IS NULL AND i.coletado_em >= %s))
+                ORDER BY COALESCE(i.publicado_em, i.coletado_em) DESC
+                LIMIT %s""",
+            tuple(fontes) + (desde, desde, int(limite)), fetch=True)
+
+    def buscar_item_clipping(self, item_id):
+        """Item do clipping com `noticia_id` preenchido só se a matéria importada ainda existe."""
+        linhas = self._rodar(
+            """SELECT i.id, i.importado_noticia_id, n.id AS noticia_id
+               FROM clipping_itens i LEFT JOIN noticias n ON n.id = i.importado_noticia_id
+               WHERE i.id = %s""", (item_id,), fetch=True)
+        return linhas[0] if linhas else None
+
+    def marcar_item_clipping_importado(self, item_id, noticia_id):
+        self._rodar("UPDATE clipping_itens SET importado_noticia_id = %s WHERE id = %s",
+                    (noticia_id, item_id), commit=True)
+
+    def purgar_itens_clipping(self, antes):
+        """Apaga itens coletados antes da data que nunca viraram matéria."""
+        self._rodar("DELETE FROM clipping_itens WHERE importado_noticia_id IS NULL AND coletado_em < %s",
+                    (antes,), commit=True)
+
+    def obter_estados_feeds(self, chaves) -> dict:
+        if not chaves:
+            return {}
+        marcas = ", ".join(["%s"] * len(chaves))
+        linhas = self._rodar(
+            f"SELECT chave, etag, last_modified, ultima_coleta, ultimo_status FROM clipping_feeds_estado "
+            f"WHERE chave IN ({marcas})", tuple(chaves), fetch=True)
+        return {l["chave"]: l for l in linhas}
+
+    def salvar_estado_feed(self, chave, url, etag, last_modified, quando, status):
+        self._rodar("DELETE FROM clipping_feeds_estado WHERE chave = %s", (chave,), commit=True)
+        self._rodar(
+            "INSERT INTO clipping_feeds_estado (chave, url, etag, last_modified, ultima_coleta, ultimo_status) "
+            "VALUES (%s, %s, %s, %s, %s, %s)", (chave, url[:1000], etag, last_modified, quando, (status or "")[:255]),
+            commit=True)
+
+    # ---------- Clipping: feeds próprios ----------
+    def listar_feeds_proprios(self, usuario_id):
+        return self._rodar("SELECT id, nome, url, secao, criado_em FROM clipping_feeds_proprios "
+                           "WHERE usuario_id = %s ORDER BY nome", (usuario_id,), fetch=True)
+
+    def criar_feed_proprio(self, usuario_id, nome, url, secao, criado_em):
+        return self._rodar(
+            "INSERT INTO clipping_feeds_proprios (usuario_id, nome, url, secao, criado_em) VALUES (%s, %s, %s, %s, %s)",
+            (usuario_id, nome, url, secao, criado_em), commit=True)["id"]
+
+    def excluir_feed_proprio(self, usuario_id, feed_id):
+        self._rodar("DELETE FROM clipping_feeds_proprios WHERE id = %s AND usuario_id = %s",
+                    (feed_id, usuario_id), commit=True)
+
+    # ---------- Clipping: importações salvas e histórico ----------
+    CAMPOS_IMPORTACAO = ("nome", "fontes", "secoes", "palavras_incluir", "palavras_excluir", "periodo_horas",
+                         "limite_por_fonte", "so_com_imagem", "ordem", "categoria_id", "autor_id",
+                         "status_destino", "automatica")
+
+    def listar_importacoes_salvas(self, usuario_id):
+        return self._rodar("SELECT * FROM importacoes_salvas WHERE usuario_id = %s ORDER BY nome",
+                           (usuario_id,), fetch=True)
+
+    def buscar_importacao_salva(self, importacao_id):
+        linhas = self._rodar("SELECT * FROM importacoes_salvas WHERE id = %s", (importacao_id,), fetch=True)
+        return linhas[0] if linhas else None
+
+    def criar_importacao_salva(self, usuario_id, dados: dict):
+        campos = list(self.CAMPOS_IMPORTACAO)
+        r = self._rodar(
+            f"INSERT INTO importacoes_salvas (usuario_id, {', '.join(campos)}) "
+            f"VALUES (%s, {', '.join(['%s'] * len(campos))})",
+            (usuario_id,) + tuple(dados.get(c) for c in campos), commit=True)
+        return r["id"]
+
+    def atualizar_importacao_salva(self, importacao_id, dados: dict):
+        campos = list(self.CAMPOS_IMPORTACAO)
+        self._rodar(
+            "UPDATE importacoes_salvas SET " + ", ".join(f"{c} = %s" for c in campos) + " WHERE id = %s",
+            tuple(dados.get(c) for c in campos) + (importacao_id,), commit=True)
+
+    def excluir_importacao_salva(self, importacao_id):
+        self._rodar("DELETE FROM importacoes_salvas WHERE id = %s", (importacao_id,), commit=True)
+
+    def marcar_execucao_importacao(self, importacao_id, quando):
+        self._rodar("UPDATE importacoes_salvas SET ultima_execucao = %s WHERE id = %s",
+                    (quando, importacao_id), commit=True)
+
+    def registrar_historico_clipping(self, usuario_id, quando, origem, nome, importadas, existentes, falhas, fontes):
+        self._rodar(
+            "INSERT INTO clipping_historico (usuario_id, quando, origem, nome, importadas, existentes, falhas, fontes) "
+            "VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
+            (usuario_id, quando, origem, nome, importadas, existentes, falhas, (fontes or "")[:500]), commit=True)
+
+    def listar_historico_clipping(self, limite=20):
+        return self._rodar("SELECT * FROM clipping_historico ORDER BY quando DESC, id DESC LIMIT %s",
+                           (int(limite),), fetch=True)
+
+    def buscar_autor_por_nome(self, nome):
+        linhas = self._rodar("SELECT id, nome FROM autores WHERE nome = %s LIMIT 1", (nome,), fetch=True)
+        return linhas[0] if linhas else None

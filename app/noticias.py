@@ -254,7 +254,10 @@ class NoticiaService(_ServicoBase):
     def criar(self, titulo: str, categoria_id, autor_id, conteudo: str = "", subtitulo: str = "",
               status: str = "rascunho", destaque: bool = False, etiquetas: str = "",
               data=None, imagem: str = None, imagem_legenda: str = "",
-              imagem_credito: str = "") -> Resultado:
+              imagem_credito: str = "", fonte_nome: str = None, fonte_url: str = None,
+              fonte_guid: str = None) -> Resultado:
+        """fonte_nome/fonte_url/fonte_guid: só para matérias importadas por clipping
+        (conteúdo externo); nas matérias normais ficam vazios."""
         try:
             d, erro = self._validar(self._montar_dados(
                 titulo, categoria_id, autor_id, conteudo, subtitulo, status, destaque, etiquetas,
@@ -264,7 +267,8 @@ class NoticiaService(_ServicoBase):
             novo_id = self.db.criar_noticia(
                 d["titulo"], d["conteudo"], d["categoria_id"], d["autor_id"], d["data"],
                 d["subtitulo"], d["status"], d["destaque"], d["etiquetas"],
-                d["imagem"], d["imagem_legenda"], d["imagem_credito"])
+                d["imagem"], d["imagem_legenda"], d["imagem_credito"],
+                fonte_nome, fonte_url, fonte_guid)
         except ErroBanco as e:
             return self._falha_banco("Erro ao criar notícia", e)
         self.logger.info(f"Notícia criada: {d['titulo']} (id {novo_id}, {d['status']})")

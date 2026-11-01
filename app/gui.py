@@ -38,9 +38,11 @@ from .tela_leitura import LeituraFrame
 from .tela_graficos import GraficosFrame
 from .tela_notificacoes import PainelNotificacoes
 from .tela_perfil import PerfilFrame
+from .tela_clipping import ClippingFrame
+from .tela_tempo import AtualizadorTempo, TempoFrame, perguntar_localizacao_inicial
 from .notificacoes import NotificacaoService, Sessao
 from .perfil import PerfilService
-from .shell import Cabecalho, AreaAbas, Rodape
+from .shell import Cabecalho, AreaAbas, Rodape, ITENS_NAVEGACAO
 
 
 # =============================================================================
@@ -916,6 +918,11 @@ class MainWindow(tk.Tk):
             self.notificacoes.purgar_antigas()
             self._atualizar_notificacoes()
             self.after(self.INTERVALO_NOTIFICACOES_MS, self._tique_notificacoes)
+        self.tempo.iniciar()
+        # importações salvas marcadas como automáticas: 1 vez por dia, em segundo plano, depois de abrir
+        self.after(2500, self.aba_clipping.executar_automaticas)
+        # a pergunta da localização aparece depois de a janela estar visível
+        self.after(700, lambda: perguntar_localizacao_inicial(self, self.tempo))
 
     # ---------- Layout geral ----------
     def _montar_layout(self):
@@ -927,6 +934,7 @@ class MainWindow(tk.Tk):
             verificar_conexao=self._banco_conectado,
             ao_notificacoes=self.alternar_notificacoes,
             ao_perfil=lambda: self.mostrar_aba("perfil"),
+            ao_tempo=self.abrir_tempo,
         )
         self.cabecalho.pack(fill="x")
         Rodape(self).pack(side="bottom", fill="x")
@@ -942,9 +950,18 @@ class MainWindow(tk.Tk):
         self.aba_autores = AutoresFrame(
             self.area, self.db, self.logger, ao_alterar=self._apos_alterar_cadastros)
         self.aba_graficos = GraficosFrame(self.area, self.db, self.logger)
+        self.aba_clipping = ClippingFrame(self.area, self.db, self.logger, self.usuario,
+                                          ao_alterar=self._clipping_alterou)
+        # Previsão do tempo: o atualizador alimenta a faixa superior e a tela maior
+        self.tempo = AtualizadorTempo(self, self.db, self.logger, self.usuario.get("id"))
+        self.tempo.adicionar_ouvinte(lambda: self.cabecalho.definir_tempo(self.tempo.texto_faixa()))
         self.aba_perfil = PerfilFrame(
             self.area, self.db, self.logger, self.usuario, ao_sair=self._sair,
-            ao_perfil_alterado=self._perfil_alterado, abrir_2fa=self._abrir_config_2fa)
+            ao_perfil_alterado=self._perfil_alterado, abrir_2fa=self._abrir_config_2fa,
+            atualizador_tempo=self.tempo)
+        self.aba_tempo = TempoFrame(
+            self.area, self.db, self.logger, self.tempo, ao_voltar=self._voltar_do_tempo,
+            ao_criar_pauta=lambda dados: self.abrir_editor(dados_iniciais=dados))
         # Telas "inteiras" que não aparecem na navegação: editor redacional e leitura
         self.aba_editor = EditorFrame(
             self.area, self.db, self.logger, ao_ler=self.abrir_leitura,
@@ -960,9 +977,11 @@ class MainWindow(tk.Tk):
         self.area.adicionar("categorias", self.aba_categorias)
         self.area.adicionar("autores", self.aba_autores)
         self.area.adicionar("graficos", self.aba_graficos)
+        self.area.adicionar("clipping", self.aba_clipping)
         self.area.adicionar("perfil", self.aba_perfil)
         self.area.adicionar("editor", self.aba_editor)
         self.area.adicionar("leitura", self.aba_leitura)
+        self.area.adicionar("tempo", self.aba_tempo)
 
         # Painel de despachos & notificações (gaveta sobre o lado direito da janela)
         self.notificacoes = NotificacaoService(self.db, self.logger, self.usuario.get("id"))
@@ -986,7 +1005,7 @@ class MainWindow(tk.Tk):
             return
         self.area.mostrar(chave)
         self.cabecalho.definir_ativa(chave)
-        if chave in ("noticias", "categorias", "autores", "graficos", "perfil"):
+        if chave in ("noticias", "categorias", "autores", "graficos", "clipping", "perfil"):
             self.area.tela(chave).recarregar()
 
     def abrir_editor(self, noticia_id=None, dados_iniciais=None):
@@ -1004,6 +1023,25 @@ class MainWindow(tk.Tk):
         self.area.mostrar("leitura")
         self.cabecalho.definir_ativa("noticias")
         self.aba_leitura.carregar(noticia_id, contar_leitura)
+
+    def abrir_tempo(self):
+        """Abre a tela maior de previsão do tempo (tela interna: não aparece no menu)."""
+        if self.area.atual == "tempo":
+            return
+        if not self._pode_sair_da_tela():
+            return
+        self._tela_antes_do_tempo = self.area.atual or "noticias"
+        self.area.mostrar("tempo")
+        itens = dict(ITENS_NAVEGACAO)
+        self.cabecalho.definir_ativa(self._tela_antes_do_tempo if self._tela_antes_do_tempo in itens else None)
+        self.aba_tempo.mostrar()
+
+    def _voltar_do_tempo(self):
+        destino = getattr(self, "_tela_antes_do_tempo", "noticias")
+        if destino in ("editor", "leitura"):
+            # essas telas dependem de uma matéria carregada: volta ao feed
+            destino = "noticias"
+        self.mostrar_aba(destino)
 
     def _buscar_no_feed(self, termo):
         self.mostrar_aba("noticias")
@@ -1069,6 +1107,10 @@ class MainWindow(tk.Tk):
             self.mostrar_aba("perfil")
 
     # ---------- Perfil ----------
+    def _clipping_alterou(self):
+        """O clipping criou matérias/avisos: atualiza o sino de notificações."""
+        self._atualizar_notificacoes()
+
     def _perfil_alterado(self):
         """Depois de salvar o perfil: atualiza o cabeçalho, o título da janela e as notificações."""
         self.cabecalho.atualizar_usuario(self.usuario)

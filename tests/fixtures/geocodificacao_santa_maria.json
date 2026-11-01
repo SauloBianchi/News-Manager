@@ -1,0 +1,41 @@
+{
+ "results": [
+  {
+   "id": 3450083,
+   "name": "Santa Maria",
+   "latitude": -29.68417,
+   "longitude": -53.80694,
+   "elevation": 113.0,
+   "country_code": "BR",
+   "timezone": "America/Sao_Paulo",
+   "admin1": "Rio Grande do Sul",
+   "country": "Brasil"
+  },
+  {
+   "id": 3450084,
+   "name": "Santa Maria",
+   "latitude": -11.06,
+   "longitude": -37.4,
+   "country_code": "BR",
+   "timezone": "America/Maceio",
+   "admin1": "Sergipe",
+   "country": "Brasil"
+  },
+  {
+   "id": 5393052,
+   "name": "Santa Maria",
+   "latitude": 34.95,
+   "longitude": -120.43,
+   "country_code": "US",
+   "timezone": "America/Los_Angeles",
+   "admin1": "Califórnia",
+   "country": "Estados Unidos"
+  },
+  {
+   "id": 1,
+   "name": "Sem coordenadas",
+   "country": "Brasil"
+  }
+ ],
+ "generationtime_ms": 0.9
+}

@@ -78,8 +78,10 @@ class Interruptor(tk.Canvas):
 
 
 class PerfilFrame(_TelaBase):
-    def __init__(self, parent, db, logger, usuario, ao_sair=None, ao_perfil_alterado=None, abrir_2fa=None):
+    def __init__(self, parent, db, logger, usuario, ao_sair=None, ao_perfil_alterado=None, abrir_2fa=None,
+                 atualizador_tempo=None):
         super().__init__(parent, db, logger, None)
+        self.atualizador_tempo = atualizador_tempo   # AtualizadorTempo (cidade da previsão), opcional
         self.usuario = usuario            # dicionário compartilhado com a janela principal
         self.servico = PerfilService(db, logger, midia_global)
         self.ao_sair = ao_sair
@@ -313,9 +315,31 @@ class PerfilFrame(_TelaBase):
             interruptor.pack(side="right")
             self.interruptores[chave] = interruptor
             tk.Frame(interno, bg=t.BORDER, height=1).pack(fill="x")
+        if self.atualizador_tempo is not None:
+            linha = tk.Frame(interno, bg=t.SURFACE)
+            linha.pack(fill="x")
+            texto = tk.Frame(linha, bg=t.SURFACE)
+            texto.pack(side="left", fill="x", expand=True, pady=10)
+            tk.Label(texto, text="Cidade", fg=t.TEXT, bg=t.SURFACE, anchor="w", font=t.Fontes.display(14)).pack(fill="x")
+            self.rotulo_cidade = tk.Label(texto, text="", fg=t.TEXT_MUTED, bg=t.SURFACE, anchor="w", font=t.Fontes.corpo(8))
+            self.rotulo_cidade.pack(fill="x")
+            t.botao_secundario(linha, "ESCOLHER CIDADE…", self._escolher_cidade).pack(side="right")
+            tk.Frame(interno, bg=t.BORDER, height=1).pack(fill="x")
+            self._mostrar_cidade()
         rodape = tk.Frame(interno, bg=t.SURFACE)
         rodape.pack(fill="x", pady=(14, 0))
         t.botao_secundario(rodape, "PRESERVAR PREFERÊNCIAS DO OPERADOR", self._salvar_preferencias).pack(side="right")
+
+    def _mostrar_cidade(self):
+        from .tempo import rotulo_local
+        local = self.atualizador_tempo.local()
+        padrao = "" if self.atualizador_tempo.tem_cidade_salva() else " (cidade padrão: nenhuma foi escolhida)"
+        self.rotulo_cidade.configure(text=f"Previsão do tempo para {rotulo_local(local)}{padrao}. "
+                                          "A mesma cidade vale na faixa superior e na tela de previsão.")
+
+    def _escolher_cidade(self):
+        from .tela_tempo import DialogoEscolherCidade
+        DialogoEscolherCidade(self, self.atualizador_tempo, ao_escolher=lambda l: self._mostrar_cidade())
 
     @staticmethod
     def _email_configurado() -> bool:

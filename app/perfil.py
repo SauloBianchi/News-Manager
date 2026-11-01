@@ -30,6 +30,10 @@ ROTULOS = {"nome": "O nome completo", "byline": "O nome em assinatura", "telefon
            "atribuicao": "A atribuição regimental", "cargo": "O cargo", "matricula": "A matrícula",
            "registro": "O registro profissional", "conselho": "O conselho editorial", "mesa": "A mesa de operação",
            "nota_biografica": "A nota biográfica"}
+# Cidade da previsão do tempo: preferências de texto, guardadas na mesma tabela
+# preferencias_usuario (chave/valor) que os interruptores do Perfil.
+CHAVES_LOCAL = ("cidade_nome", "cidade_regiao", "cidade_pais", "cidade_lat", "cidade_lon", "cidade_fuso")
+CHAVE_DECISAO_IP = "localizacao_ip"      # "aceita" | "recusa": a pergunta só é feita uma vez
 ROTULOS_PREFERENCIA = {
     "alerta_sonoro": ("Alertas sonoros de furo de reportagem",
                       "Toca um sinal quando chega um despacho urgente não lido."),
@@ -188,3 +192,53 @@ class PerfilService(_ServicoBase):
         if Sessao.usuario_id() == usuario_id:
             Sessao.preferencias = {**Sessao.preferencias, **textos}
         return Resultado(True, "Preferências do operador preservadas.")
+
+    # ---------- cidade da previsão do tempo ----------
+    def obter_local(self, usuario_id):
+        """Cidade salva do usuário ({nome, regiao, pais, latitude, longitude, fuso}) ou None."""
+        try:
+            g = self.db.obter_preferencias(usuario_id)
+        except ErroBanco as e:
+            self._falha_banco("Erro ao carregar a cidade do usuário", e)
+            return None
+        try:
+            if not g.get("cidade_nome") or "cidade_lat" not in g or "cidade_lon" not in g:
+                return None
+            return {"nome": g["cidade_nome"], "regiao": g.get("cidade_regiao", ""), "pais": g.get("cidade_pais", ""),
+                    "latitude": float(g["cidade_lat"]), "longitude": float(g["cidade_lon"]),
+                    "fuso": g.get("cidade_fuso") or "auto"}
+        except ValueError:
+            return None
+
+    def salvar_local(self, usuario_id, local) -> Resultado:
+        """Grava a cidade escolhida (vale para a faixa superior, a tela do tempo e o Perfil)."""
+        try:
+            nome = _limpar(local.get("nome"))
+            lat, lon = float(local["latitude"]), float(local["longitude"])
+        except (KeyError, TypeError, ValueError, AttributeError):
+            return Resultado(False, "Cidade inválida.")
+        if not nome or not (-90 <= lat <= 90 and -180 <= lon <= 180):
+            return Resultado(False, "Cidade inválida.")
+        valores = {"cidade_nome": nome[:120], "cidade_regiao": _limpar(local.get("regiao"))[:80],
+                   "cidade_pais": _limpar(local.get("pais"))[:80], "cidade_lat": f"{lat:.4f}",
+                   "cidade_lon": f"{lon:.4f}", "cidade_fuso": (local.get("fuso") or "auto")[:60]}
+        try:
+            self.db.salvar_preferencias(usuario_id, valores)
+        except ErroBanco as e:
+            return self._falha_banco("Erro ao salvar a cidade", e)
+        return Resultado(True, f"Cidade da previsão: {nome}.", valores)
+
+    def decisao_localizacao_ip(self, usuario_id):
+        """'aceita', 'recusa' ou None (ainda não perguntado)."""
+        try:
+            return self.db.obter_preferencias(usuario_id).get(CHAVE_DECISAO_IP)
+        except ErroBanco as e:
+            self._falha_banco("Erro ao carregar a preferência de localização", e)
+            return "recusa"   # na dúvida, não pergunta nem usa o IP
+
+    def registrar_decisao_ip(self, usuario_id, aceitou: bool) -> Resultado:
+        try:
+            self.db.salvar_preferencias(usuario_id, {CHAVE_DECISAO_IP: "aceita" if aceitou else "recusa"})
+        except ErroBanco as e:
+            return self._falha_banco("Erro ao salvar a decisão", e)
+        return Resultado(True)

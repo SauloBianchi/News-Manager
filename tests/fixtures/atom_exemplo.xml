@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom" xmlns:media="http://search.yahoo.com/mrss/">
+  <title type="text">Agência Exemplo — Últimas</title>
+  <id>tag:agencia.exemplo.gov.br,2026:feed</id>
+  <updated>2026-10-28T12:00:00-03:00</updated>
+  <link rel="self" href="https://agencia.exemplo.gov.br/feed.atom"/>
+  <entry>
+    <title type="html">Economia cresce 0,6% no trimestre &amp;mdash; IBGE</title>
+    <id>tag:agencia.exemplo.gov.br,2026:materia-100</id>
+    <link rel="alternate" type="text/html" href="https://agencia.exemplo.gov.br/economia/pib-trimestre"/>
+    <link rel="enclosure" type="image/jpeg" href="https://agencia.exemplo.gov.br/img/pib.jpg"/>
+    <published>2026-10-28T09:30:00-03:00</published>
+    <updated>2026-10-28T10:00:00-03:00</updated>
+    <author><name>Equipe de Economia</name></author>
+    <summary type="html">&lt;p&gt;O Produto Interno Bruto avançou &lt;strong&gt;0,6%&lt;/strong&gt; no terceiro trimestre.&lt;/p&gt;</summary>
+  </entry>
+  <entry>
+    <title>Tecnologia: Brasil lança supercomputador em Petrópolis</title>
+    <id>tag:agencia.exemplo.gov.br,2026:materia-101</id>
+    <link href="https://agencia.exemplo.gov.br/tecnologia/supercomputador"/>
+    <updated>2026-10-27T23:00:00Z</updated>
+    <content type="html">&lt;p&gt;Máquina entra em operação em 2027.&lt;/p&gt;</content>
+    <media:thumbnail url="https://agencia.exemplo.gov.br/img/super.jpg"/>
+  </entry>
+  <entry>
+    <title>Entrada sem link não serve</title>
+    <id>tag:agencia.exemplo.gov.br,2026:materia-102</id>
+  </entry>
+</feed>

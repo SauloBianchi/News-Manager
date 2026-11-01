@@ -43,6 +43,8 @@ from pathlib import Path
 RAIZ = Path(__file__).resolve().parent
 sys.path.insert(0, str(RAIZ))
 
+from app import clipping as clipping_mod  # noqa: E402
+from app import tempo as tempo_mod  # noqa: E402
 from app.cadastros import AutorService, CategoriaService  # noqa: E402
 from app.database import DatabaseManager, ErroBanco  # noqa: E402
 from app.estatisticas import EstatisticasService, FiltroEstatisticas  # noqa: E402
@@ -624,6 +626,10 @@ def _limpar(db, logger):
         id_ = id_por(db, "categorias", "nome", nome)
         if id_ and cs.excluir(id_).ok:          # editoria com matérias de outras pessoas é mantida
             removidos["categorias"] += 1
+    try:
+        _limpar_clipping_seed(db)       # sobras de uma verificação de clipping interrompida
+    except ErroBanco:
+        pass
     arquivo = RAIZ / "rascunhos" / "autosave_novo.json"
     try:
         if arquivo.is_file() and json.loads(arquivo.read_text(encoding="utf-8")).get("titulo") == MARCA_AUTOSAVE:
@@ -827,6 +833,7 @@ def _verificar(db, logger):
 
     verificar_estatisticas(v, db, logger, ns)
     verificar_notificacoes_e_perfil(v, db, logger)
+    verificar_tempo_e_clipping(v, db, logger)
 
     print(f"\nResultado: {v.ok} verificações OK, {len(v.falhas)} falha(s), {len(v.avisos)} aviso(s).")
     for nome in v.falhas:
@@ -961,6 +968,187 @@ def verificar_estatisticas(v, db, logger, ns):
 
 
 # ---------------------------------------------------------------------------
+# Previsão do tempo e Clipping: verificação OFFLINE (fixtures de tests/fixtures)
+# ---------------------------------------------------------------------------
+FONTE_VERIFICACAO = "seed_verif"      # fonte fictícia: só existe durante a verificação
+NOME_FONTE_VERIFICACAO = "Exemplo Seed"
+LOCAL_VERIFICACAO = {"nome": "Cidade de Teste", "regiao": "Teste", "pais": "Brasil", "latitude": 0.01,
+                     "longitude": 0.01, "fuso": "auto"}
+FIXTURES = RAIZ / "tests" / "fixtures"
+
+
+def _ler_fixture(nome):
+    return (FIXTURES / nome).read_bytes()
+
+
+def _limpar_clipping_seed(db):
+    """Remove tudo o que a verificação do clipping cria (também de execuções interrompidas)."""
+    for linha in db._rodar("SELECT importado_noticia_id AS id FROM clipping_itens WHERE fonte_chave = %s AND "
+                           "importado_noticia_id IS NOT NULL", (FONTE_VERIFICACAO,), fetch=True):
+        db._rodar("DELETE FROM noticias WHERE id = %s", (linha["id"],), commit=True)
+    db._rodar("DELETE FROM clipping_itens WHERE fonte_chave = %s", (FONTE_VERIFICACAO,), commit=True)
+    db._rodar("DELETE FROM clipping_historico WHERE nome = %s", ("Verificação do seed",), commit=True)
+    db._rodar("DELETE FROM autores WHERE nome = %s", (clipping_mod.PREFIXO_AUTOR + NOME_FONTE_VERIFICACAO,), commit=True)
+    db._rodar("DELETE FROM tempo_cache WHERE chave = %s", (tempo_mod.chave_cache(LOCAL_VERIFICACAO),), commit=True)
+    for feed in ("https://exemplo.invalid/rss.xml", "https://exemplo.invalid/atom.xml", "https://exemplo.invalid/fora.xml"):
+        db._rodar("DELETE FROM clipping_feeds_estado WHERE chave = %s", (clipping_mod.chave_url(feed),), commit=True)
+
+
+class _RedeSimulada:
+    """buscar() de mentira: devolve as fixtures; nada sai para a internet."""
+    def __init__(self):
+        from app.rede import ErroRede, RespostaHttp
+        self.ErroRede, self.Resposta = ErroRede, RespostaHttp
+        self.chamadas = []
+
+    def __call__(self, url, params=None, timeout=10, cabecalhos=None, max_bytes=0):
+        self.chamadas.append(url)
+        if "open-meteo" in url:
+            return self.Resposta(200, _ler_fixture("open_meteo_santa_maria.json"))
+        if url.endswith("rss.xml"):
+            return self.Resposta(200, _ler_fixture("rss_exemplo.xml"))
+        if url.endswith("atom.xml"):
+            return self.Resposta(200, _ler_fixture("atom_exemplo.xml"))
+        if url.endswith("fora.xml"):
+            raise self.ErroRede("O servidor demorou demais para responder (tempo esgotado).")
+        return self.Resposta(404)
+
+
+def verificar_tempo_e_clipping(v, db, logger):
+    """Confere, sem internet, as tabelas novas, o parser, o cache do tempo, a importação e as falhas parciais.
+    Tudo o que cria é removido no fim."""
+    print("\nPrevisão do tempo e Clipping (offline, com tests/fixtures)")
+    if not FIXTURES.is_dir():
+        v.avisar("pasta tests/fixtures ausente: verificação do clipping/tempo ignorada")
+        return
+    for tabela in ("tempo_cache", "clipping_itens", "importacoes_salvas", "clipping_historico",
+                   "clipping_feeds_estado", "clipping_feeds_proprios"):
+        try:
+            db._rodar(f"SELECT 1 FROM {tabela} LIMIT 1", fetch=True)
+            v.checar(f"tabela {tabela} existe (migração automática)", True)
+        except ErroBanco as e:
+            v.checar(f"tabela {tabela} existe (migração automática)", False, str(e))
+    try:
+        db._rodar("SELECT fonte_nome, fonte_url, fonte_guid FROM noticias LIMIT 1", fetch=True)
+        v.checar("colunas fonte_nome/fonte_url/fonte_guid em noticias", True)
+    except ErroBanco as e:
+        v.checar("colunas fonte_nome/fonte_url/fonte_guid em noticias", False, str(e))
+        return
+
+    rede_falsa = _RedeSimulada()
+    _limpar_clipping_seed(db)
+    try:
+        # ---- tempo ----
+        servico = tempo_mod.TempoService(db, logger)
+        r = servico.obter_previsao(LOCAL_VERIFICACAO, forcar=True, buscar=rede_falsa)
+        v.checar("previsão lida da fixture do Open-Meteo", r.ok and r.dados["atual"]["descricao"] == "Poucas nuvens",
+                 r.mensagem)
+        v.checar("previsão traz 24 horas e 7 dias", r.ok and len(r.dados["horas"]) == 24 and len(r.dados["dias"]) == 7)
+        v.checar("alerta de UV gerado pela regra", r.ok and any("UV" in a for a in tempo_mod.gerar_alertas(r.dados)))
+        antes = len(rede_falsa.chamadas)
+        r2 = servico.obter_previsao(LOCAL_VERIFICACAO, buscar=rede_falsa)
+        v.checar("segunda leitura vem do cache (sem rede)", r2.ok and r2.dados["origem"] == "cache"
+                 and len(rede_falsa.chamadas) == antes)
+
+        def sem_rede(*a, **k):
+            raise rede_falsa.ErroRede("Sem conexão com a internet.")
+        r3 = servico.obter_previsao(LOCAL_VERIFICACAO, forcar=True, buscar=sem_rede)
+        v.checar("sem internet: usa o cache e marca como desatualizado", r3.ok and r3.dados["desatualizada"])
+        v.checar("códigos WMO em português", tempo_mod.descrever_codigo(95)[0] == "Tempestade"
+                 and tempo_mod.descrever_codigo(63)[0] == "Chuva")
+
+        # ---- clipping ----
+        catalogo = [{"chave": FONTE_VERIFICACAO, "nome": NOME_FONTE_VERIFICACAO, "ativo": True, "proprio": False,
+                     "feeds": [{"secao": "Política", "url": "https://exemplo.invalid/rss.xml", "categoria_sugerida": "politica",
+                                "chave_feed": FONTE_VERIFICACAO + ":politica", "verificacao": "indireta"},
+                               {"secao": "Geral", "url": "https://exemplo.invalid/atom.xml", "categoria_sugerida": None,
+                                "chave_feed": FONTE_VERIFICACAO + ":geral", "verificacao": "indireta"},
+                               {"secao": "Fora do ar", "url": "https://exemplo.invalid/fora.xml", "categoria_sugerida": None,
+                                "chave_feed": FONTE_VERIFICACAO + ":fora", "verificacao": "indireta"}]}]
+        cs = clipping_mod.ClippingService(db, logger, gerenciador_midia, catalogo=catalogo)
+        filtro = clipping_mod.FiltroClipping(fontes=[FONTE_VERIFICACAO], periodo_horas=24 * 365 * 5, limite_por_fonte=50,
+                                             ocultar_importados=False)
+        previa = cs.buscar_agora(0, filtro, rede_falsa)
+        itens = previa.dados["itens"] if previa.ok else []
+        v.checar("prévia lê RSS e Atom das fixtures (acentos, HTML limpo)",
+                 previa.ok and len(itens) == 6 and all("<" not in (i.get("resumo") or "") for i in itens), previa.mensagem)
+        v.checar("feed fora do ar não derruba os outros (motivo informado)",
+                 previa.ok and len(previa.dados["falhas"]) == 1 and "tempo esgotado" in previa.dados["falhas"][0]["motivo"])
+        selecionados = [i for i in itens if "Gre-Nal" in i["titulo"] or "Economia cresce" in i["titulo"]]
+        res = cs.importar(0, selecionados, nome="Verificação do seed")
+        v.checar("importação cria matérias", res.ok and res.dados["importadas"] == 2, res.mensagem)
+        criadas = db._rodar("SELECT status, conteudo, fonte_nome, fonte_url, imagem FROM noticias WHERE fonte_nome = %s",
+                            (NOME_FONTE_VERIFICACAO,), fetch=True)
+        v.checar("matérias importadas ficam em_pauta, nunca publicadas", len(criadas) == 2
+                 and all(c["status"] == "em_pauta" for c in criadas))
+        v.checar("atribuição no texto e nos campos da fonte", all(
+            f"Fonte: [{NOME_FONTE_VERIFICACAO}](" in c["conteudo"] and c["fonte_url"].startswith("http") for c in criadas))
+        v.checar("nenhuma imagem baixada", all(c["imagem"] is None for c in criadas))
+        again = cs.importar(0, selecionados, nome="Verificação do seed")
+        v.checar("reimportar não duplica", again.dados["importadas"] == 0 and again.dados["existentes"] == 2)
+        marcados = cs.previa(0, filtro)
+        v.checar("itens importados aparecem marcados na prévia", marcados.ok and sum(
+            1 for i in marcados.dados["itens"] if i["ja_importado"]) == 2)
+        v.checar("publicar direto é recusado", not cs.importar(0, selecionados, status_destino="publicado").ok)
+    finally:
+        _limpar_clipping_seed(db)
+    sobras = db._rodar("SELECT COUNT(*) AS n FROM noticias WHERE fonte_nome = %s", (NOME_FONTE_VERIFICACAO,), fetch=True)
+    v.checar("dados temporários do clipping removidos", sobras[0]["n"] == 0)
+
+
+# ---------------------------------------------------------------------------
+# Verificação de rede (opcional): roda NA MÁQUINA DO USUÁRIO
+# ---------------------------------------------------------------------------
+def verificar_rede(com_ip=False):
+    """python seed.py --verificar-rede: testa ao vivo cada feed do catálogo e a API do tempo (OK/FALHA).
+    Não usa banco. Uma requisição por feed (respeita o intervalo mínimo por ser uma única coleta)."""
+    from app import rede
+    print("Verificação ao vivo (precisa de internet; em rede de faculdade/empresa pode exigir proxy)\n")
+    falhas = 0
+    print("Feeds do catálogo (config/fontes_noticias.json)")
+    feeds = []
+    for fonte in clipping_mod.carregar_catalogo():
+        if not fonte["feeds"]:
+            print(f"  ----   {fonte['nome']}: sem feed cadastrado (use 'Adicionar feed próprio' na tela Clipping)")
+        for feed in fonte["feeds"]:
+            feeds.append({"fonte_chave": fonte["chave"], "fonte_nome": fonte["nome"], "secao": feed["secao"],
+                          "url": feed["url"], "verificacao": feed["verificacao"]})
+    for r in clipping_mod.coletar_feeds(feeds, {}, rede.buscar, datetime.now(), pausa=1.0):
+        f = r["feed"]
+        ok = r["status"] in ("ok", "nao_modificado")
+        falhas += 0 if ok else 1
+        marca = "OK    " if ok else "FALHA "
+        print(f"  {marca} {f['fonte_nome']} — {f['secao']}: {r['motivo']}  [{f['verificacao']}]")
+    print("\nPrevisão do tempo (Open-Meteo)")
+    local = tempo_mod.CIDADE_PADRAO
+    try:
+        previsao = tempo_mod.interpretar_previsao(tempo_mod.baixar_previsao(local))
+        a = previsao["atual"]
+        print(f"  OK     previsão de {local['nome']}: {a['temperatura']}°C, {a['descricao']}; "
+              f"{len(previsao['horas'])} horas e {len(previsao['dias'])} dias")
+    except Exception as e:
+        falhas += 1
+        print(f"  FALHA  previsão: {e}")
+    try:
+        cidades = tempo_mod.buscar_cidades_rede(local["nome"])
+        print(f"  OK     busca de cidades: {len(cidades)} resultado(s) para '{local['nome']}'")
+    except Exception as e:
+        falhas += 1
+        print(f"  FALHA  busca de cidades: {e}")
+    if com_ip:
+        try:
+            achada = tempo_mod.localizar_por_ip_rede()
+            print(f"  OK     localização por IP: {tempo_mod.rotulo_local(achada)}")
+        except Exception as e:
+            falhas += 1
+            print(f"  FALHA  localização por IP: {e}")
+    else:
+        print("  ----   localização por IP não testada (envia seu IP a um terceiro); use --com-ip para testar")
+    print(f"\n{'Tudo certo.' if not falhas else str(falhas) + ' falha(s). Veja README > Solução de problemas de rede.'}")
+    return falhas
+
+
+# ---------------------------------------------------------------------------
 # Conexão (com ajuda para os erros mais comuns)
 # ---------------------------------------------------------------------------
 def preparar_banco(host, usuario, senha, banco):
@@ -1012,11 +1200,17 @@ def main():
     ap.add_argument("--autosave", action="store_true", help="cria um auto-salvamento de exemplo para o editor")
     ap.add_argument("--sem-imagens", action="store_true", help="não gera capas nem fotos")
     ap.add_argument("--volume", type=int, default=120, help="matérias extras para os gráficos (padrão 120; 0 = nenhuma)")
+    ap.add_argument("--verificar-rede", action="store_true",
+                    help="testa AO VIVO os feeds do clipping e a API do tempo (precisa de internet; não usa o banco)")
+    ap.add_argument("--com-ip", action="store_true", help="com --verificar-rede, testa também a localização por IP")
     ap.add_argument("--host", default="localhost")
     ap.add_argument("--usuario", default="root")
     ap.add_argument("--senha", default="")
     ap.add_argument("--banco", default="newsmanager")
     args = ap.parse_args()
+
+    if args.verificar_rede:
+        sys.exit(1 if verificar_rede(args.com_ip) else 0)
 
     logger = Logger()
     db = DatabaseManager(host=args.host, user=args.usuario, password=args.senha, database=args.banco)

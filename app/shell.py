@@ -2,8 +2,8 @@
 shell.py
 "Moldura" da janela principal, reproduzindo o cabeçalho do protótipo Stitch:
 
-- Cabecalho: faixa de dateline (data por extenso, edição, status do
-  sistema), masthead "NewsManager", botão "+ Nova matéria", bloco do usuário
+- Cabecalho: faixa de dateline (data por extenso, edição, previsão do tempo
+  clicável, status do sistema), masthead "NewsManager", botão "+ Nova matéria", bloco do usuário
   logado com "Sair" e a navegação em texto (Notícias, Categorias, Autores,
   Gráficos, Segurança) com filete duplo embaixo.
 - AreaAbas: troca de telas (substitui o ttk.Notebook), mostrando uma tela
@@ -27,6 +27,7 @@ ITENS_NAVEGACAO = [
     ("categorias", "Categorias"),
     ("autores", "Autores"),
     ("graficos", "Gráficos"),
+    ("clipping", "Clipping"),
 ]
 
 MARGEM = 28
@@ -47,13 +48,14 @@ class Cabecalho(tk.Frame):
     """Faixa superior fixa: dateline + masthead + navegação."""
 
     def __init__(self, parent, usuario, ao_navegar, ao_nova_materia, ao_sair,
-                 verificar_conexao=None, ao_notificacoes=None, ao_perfil=None):
+                 verificar_conexao=None, ao_notificacoes=None, ao_perfil=None, ao_tempo=None):
         super().__init__(parent, bg=t.BG)
         t.Fontes.preparar(parent)
         self.usuario = usuario or {}
         self.ao_navegar = ao_navegar
         self.ao_notificacoes = ao_notificacoes
         self.ao_perfil = ao_perfil
+        self.ao_tempo = ao_tempo
         self.verificar_conexao = verificar_conexao
         self._itens = {}
         self._ativo = None
@@ -75,7 +77,16 @@ class Cabecalho(tk.Frame):
         self.rotulo_status = tk.Label(faixa, text="● SISTEMA REDATORIAL ATIVO", fg=t.PRIMARY,
                                       bg=t.BG, font=t.Fontes.corpo(8, "bold"))
         self.rotulo_status.pack(side="right")
+        # "CIDADE • 21°C CÉU LIMPO": item do meio da faixa (como no Stitch); clicar abre a tela do tempo
+        self.rotulo_tempo = tk.Label(faixa, text="", fg=t.TEXT, bg=t.BG, cursor="hand2",
+                                     font=t.Fontes.corpo(8, "bold"))
+        self.rotulo_tempo.pack(side="left", expand=True)
+        self.rotulo_tempo.bind("<Button-1>", lambda e: self.ao_tempo() if self.ao_tempo else None)
         tk.Frame(self, bg=t.BORDER, height=1).pack(fill="x", padx=MARGEM)
+
+    def definir_tempo(self, texto):
+        """Atualiza o texto do item da previsão do tempo (a janela chama quando o dado muda)."""
+        self.rotulo_tempo.configure(text=texto)
 
     def _atualizar_status(self):
         try:

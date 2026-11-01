@@ -371,6 +371,18 @@ class RolagemVertical(tk.Frame):
         for evento in ("<MouseWheel>", "<Button-4>", "<Button-5>"):
             self.bind_all(evento, self._rolar, add="+")
 
+    def ajustar(self):
+        """Recalcula a área rolável depois que o conteúdo encolheu/cresceu (ex.: formulário fechado) e
+        não deixa a vista parada num trecho que deixou de existir (o "buraco" em branco)."""
+        self.update_idletasks()
+        self.canvas.configure(scrollregion=self.canvas.bbox("all"))
+        if self.conteudo.winfo_height() <= self.canvas.winfo_height():
+            self.canvas.yview_moveto(0)
+        else:
+            inicio, fim = self.canvas.yview()
+            if fim > 1.0 or inicio > 1.0 - (fim - inicio):
+                self.canvas.yview_moveto(1.0)
+
     def _ponteiro_esta_aqui(self, event):
         try:
             widget = self.winfo_containing(event.x_root, event.y_root)
@@ -382,15 +394,32 @@ class RolagemVertical(tk.Frame):
             widget = widget.master
         return False
 
+    def _texto_rolavel_sob_o_ponteiro(self, event, para_cima):
+        """True se o ponteiro está sobre um campo de texto/lista que ainda pode rolar nesse sentido:
+        nesse caso é ele quem rola (o Tk já faz isso) e a página inteira fica parada."""
+        try:
+            alvo = self.winfo_containing(event.x_root, event.y_root)
+        except (KeyError, tk.TclError):
+            return False
+        if not isinstance(alvo, (tk.Text, tk.Listbox)):
+            return False
+        try:
+            inicio, fim = alvo.yview()
+        except tk.TclError:
+            return False
+        if inicio <= 0.0 and fim >= 1.0:
+            return False            # tudo visível: não há o que rolar dentro do campo
+        return inicio > 0.0 if para_cima else fim < 1.0
+
     def _rolar(self, event):
         if not self._ponteiro_esta_aqui(event):
             return
+        para_cima = getattr(event, "num", None) == 4 or bool(event.delta and event.delta > 0)
+        if self._texto_rolavel_sob_o_ponteiro(event, para_cima):
+            return
         if self.conteudo.winfo_height() <= self.canvas.winfo_height():
             return
-        if getattr(event, "num", None) == 4 or (event.delta and event.delta > 0):
-            self.canvas.yview_scroll(-3, "units")
-        else:
-            self.canvas.yview_scroll(3, "units")
+        self.canvas.yview_scroll(-3 if para_cima else 3, "units")
 
 
 class _TelaBase(tk.Frame):
@@ -411,6 +440,19 @@ class _TelaBase(tk.Frame):
         self.rolagem = RolagemVertical(self)
         self.rolagem.pack(fill="both", expand=True)
         self.pagina = self.rolagem.conteudo
+
+    # ---------- formulário que abre/fecha no topo ----------
+    def _exibir_form(self):
+        self.painel_form.pack(fill="x", pady=(18, 0))
+        self.rolagem.ajustar()
+        self.rolagem.canvas.yview_moveto(0)   # leva o formulário para a vista
+
+    def _esconder_form(self):
+        """Fecha o formulário sem deixar espaço vazio: uma Frame que perde todos os filhos mantém o
+        último tamanho no Tk, então o contêiner é reduzido explicitamente."""
+        self.painel_form.pack_forget()
+        self.area_form.configure(height=1)
+        self.rolagem.ajustar()
 
     # ---------- busca ----------
     def _campo_busca(self, parent, dica):
@@ -707,12 +749,12 @@ class CategoriasFrame(_TelaBase):
             self.campo_descricao.set("")
             self.campo_cor.set("rubro")
             self.campo_status.set("ativa")
-        self.painel_form.pack(fill="x", pady=(18, 0))
+        self._exibir_form()
         self.campo_nome.focus()
 
     def _fechar_form(self):
         self._id_edicao = None
-        self.painel_form.pack_forget()
+        self._esconder_form()
 
     def _salvar(self):
         dados = (self.campo_nome.get(), self.campo_descricao.get(),
@@ -1027,13 +1069,13 @@ class AutoresFrame(_TelaBase):
         self.campo_status.set(autor["status"] if autor else "ativo")
         self.campo_bio.set(autor["bio"] or "" if autor else "")
         self.campo_foto.definir(autor["foto"] if autor else None)
-        self.painel_form.pack(fill="x", pady=(18, 0))
+        self._exibir_form()
         self.campo_nome.focus()
 
     def _fechar_form(self):
         self._id_edicao = None
         self.campo_foto.limpar()   # apaga a cópia provisória de uma foto não salva
-        self.painel_form.pack_forget()
+        self._esconder_form()
 
     def _salvar(self):
         dados = dict(

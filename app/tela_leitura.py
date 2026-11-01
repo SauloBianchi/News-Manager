@@ -166,6 +166,16 @@ class LeituraFrame(tk.Frame):
             tk.Label(bloco, text=n["subtitulo"], fg=t.TEXT_MUTED, bg=t.BG,
                      font=t.Fontes.display(14, "normal", True), wraplength=780,
                      justify="center").pack(pady=(0, 6))
+        if n.get("fonte_nome"):
+            externo = tk.Frame(bloco, bg=t.BG)
+            externo.pack(pady=(4, 0))
+            _etiqueta(externo, "Conteúdo externo", t.PRIMARY, t.BG).pack(side="left")
+            if n.get("fonte_url") and str(n["fonte_url"]).lower().startswith(("http://", "https://")):
+                t.link_texto(externo, f"FONTE: {n['fonte_nome']}".upper(),
+                             lambda u=n["fonte_url"]: webbrowser.open(u)).pack(side="left", padx=(10, 0))
+            else:
+                tk.Label(externo, text=f"FONTE: {n['fonte_nome']}".upper(), fg=t.TEXT_MUTED, bg=t.BG,
+                         font=t.Fontes.corpo(8, "bold")).pack(side="left", padx=(10, 0))
         tk.Frame(self.pagina, bg=t.TEXT, height=2).pack(fill="x", padx=MARGEM + 120, pady=(8, 0))
 
     # ---------- autoria ----------

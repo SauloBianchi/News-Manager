@@ -76,6 +76,9 @@ CREATE TABLE IF NOT EXISTS noticias (
     imagem VARCHAR(255) NULL,                          -- fotografia de capa (caminho dentro de midia/)
     imagem_legenda VARCHAR(255) NULL,
     imagem_credito VARCHAR(120) NULL,
+    fonte_nome VARCHAR(120) NULL,                      -- só nas matérias importadas por clipping (conteúdo externo)
+    fonte_url VARCHAR(1000) NULL,
+    fonte_guid VARCHAR(255) NULL,
     FOREIGN KEY (categoria_id) REFERENCES categorias(id),
     FOREIGN KEY (autor_id) REFERENCES autores(id)
 );
@@ -125,4 +128,81 @@ CREATE TABLE IF NOT EXISTS preferencias_usuario (
     chave VARCHAR(60) NOT NULL,
     valor VARCHAR(255) NOT NULL,
     PRIMARY KEY (usuario_id, chave)
+);
+
+-- ---------------------------------------------------------------------------
+-- Previsão do tempo (cache da última resposta, para abrir na hora e funcionar offline)
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS tempo_cache (
+    chave VARCHAR(40) NOT NULL PRIMARY KEY,            -- "latitude,longitude" com 2 casas
+    atualizado_em DATETIME NOT NULL,
+    payload MEDIUMTEXT NOT NULL
+);
+
+-- ---------------------------------------------------------------------------
+-- Clipping (notícias de jornais via RSS/Atom)
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS clipping_itens (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    fonte_chave VARCHAR(60) NOT NULL,
+    secao VARCHAR(80) NULL,
+    guid VARCHAR(255) NOT NULL,
+    url VARCHAR(1000) NOT NULL,
+    titulo VARCHAR(500) NOT NULL,
+    resumo TEXT NULL,
+    autor_fonte VARCHAR(200) NULL,
+    publicado_em DATETIME NULL,
+    imagem_url VARCHAR(1000) NULL,
+    coletado_em DATETIME NOT NULL,
+    importado_noticia_id INT NULL,                     -- nulo até importar
+    UNIQUE KEY uq_clipping_fonte_guid (fonte_chave, guid)
+);
+
+CREATE TABLE IF NOT EXISTS importacoes_salvas (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    usuario_id INT NOT NULL,
+    nome VARCHAR(120) NOT NULL,
+    fontes TEXT NOT NULL,                              -- JSON: chaves dos jornais
+    secoes TEXT NULL,                                  -- JSON: feeds escolhidos (vazio = todos)
+    palavras_incluir VARCHAR(500) NULL,
+    palavras_excluir VARCHAR(500) NULL,
+    periodo_horas INT NOT NULL DEFAULT 24,
+    limite_por_fonte INT NOT NULL DEFAULT 10,
+    so_com_imagem TINYINT(1) NOT NULL DEFAULT 0,
+    ordem VARCHAR(20) NOT NULL DEFAULT 'recentes',
+    categoria_id INT NULL,                             -- NULL = editoria sugerida automaticamente
+    autor_id INT NULL,                                 -- NULL = "Clipping — <jornal>"
+    status_destino VARCHAR(20) NOT NULL DEFAULT 'em_pauta',
+    automatica TINYINT(1) NOT NULL DEFAULT 0,
+    ultima_execucao DATETIME NULL
+);
+
+CREATE TABLE IF NOT EXISTS clipping_historico (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    usuario_id INT NULL,
+    quando DATETIME NOT NULL,
+    origem VARCHAR(20) NOT NULL,                       -- manual | salva | auto
+    nome VARCHAR(120) NULL,
+    importadas INT NOT NULL DEFAULT 0,
+    existentes INT NOT NULL DEFAULT 0,
+    falhas INT NOT NULL DEFAULT 0,
+    fontes VARCHAR(500) NULL
+);
+
+CREATE TABLE IF NOT EXISTS clipping_feeds_estado (     -- ETag/Last-Modified e hora da última coleta (15 min entre coletas)
+    chave CHAR(40) NOT NULL PRIMARY KEY,               -- SHA-1 da URL
+    url VARCHAR(1000) NOT NULL,
+    etag VARCHAR(255) NULL,
+    last_modified VARCHAR(100) NULL,
+    ultima_coleta DATETIME NULL,
+    ultimo_status VARCHAR(255) NULL
+);
+
+CREATE TABLE IF NOT EXISTS clipping_feeds_proprios (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    usuario_id INT NOT NULL,
+    nome VARCHAR(100) NOT NULL,
+    url VARCHAR(500) NOT NULL,
+    secao VARCHAR(80) NULL,
+    criado_em DATETIME NOT NULL
 );

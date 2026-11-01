@@ -1,0 +1,74 @@
+{
+  "_aviso": "Catálogo de fontes do Clipping (sem segredos, versionado). verificacao: 'indireta' = endereço encontrado em 28/10/2026 em diretório/documentação de terceiros (NÃO aberto ao vivo a partir da página oficial do veículo); 'nao_verificada' = endereço conhecido, mas não confirmado — por isso a fonte vem desativada. Use 'Testar fontes' na tela Clipping para confirmar na sua rede. Não há feeds confirmados para Estadão, UOL, Correio do Povo e GZH: cole o endereço oficial em 'Adicionar feed próprio'.",
+  "fontes": [
+    {
+      "chave": "g1", "nome": "G1", "pais": "BR", "idioma": "pt", "site": "https://g1.globo.com/", "ativo": true,
+      "nota": "Segundo diretório de terceiros, os feeds /brasil/, /ciencia-e-saude/ e /sao-paulo/ pararam de publicar e não foram incluídos.",
+      "feeds": [
+        {"secao": "Geral", "url": "https://g1.globo.com/rss/g1/", "categoria_sugerida": null, "verificado_em": "2026-10-28", "verificacao": "indireta"},
+        {"secao": "Política", "url": "https://g1.globo.com/rss/g1/politica/", "categoria_sugerida": "politica", "verificado_em": "2026-10-28", "verificacao": "indireta"},
+        {"secao": "Economia", "url": "https://g1.globo.com/rss/g1/economia/", "categoria_sugerida": "economia", "verificado_em": "2026-10-28", "verificacao": "indireta"},
+        {"secao": "Mundo", "url": "https://g1.globo.com/rss/g1/mundo/", "categoria_sugerida": "mundo", "verificado_em": "2026-10-28", "verificacao": "indireta"},
+        {"secao": "Pop & Arte", "url": "https://g1.globo.com/rss/g1/pop-arte/", "categoria_sugerida": "cultura", "verificado_em": "2026-10-28", "verificacao": "indireta"},
+        {"secao": "Tecnologia", "url": "https://g1.globo.com/rss/g1/tecnologia/", "categoria_sugerida": "tecnologia", "verificado_em": null, "verificacao": "nao_verificada"},
+        {"secao": "Rio Grande do Sul", "url": "https://g1.globo.com/rss/g1/rs/rio-grande-do-sul/", "categoria_sugerida": null, "verificado_em": null, "verificacao": "nao_verificada"}
+      ]
+    },
+    {
+      "chave": "agencia_brasil", "nome": "Agência Brasil", "pais": "BR", "idioma": "pt", "site": "https://agenciabrasil.ebc.com.br/", "ativo": true,
+      "nota": "Agência pública da EBC: a política de reprodução permite uso gratuito desde que a fonte seja creditada.",
+      "feeds": [
+        {"secao": "Últimas notícias", "url": "https://agenciabrasil.ebc.com.br/feed/ultimasnoticias/feed.xml", "categoria_sugerida": null, "verificado_em": "2026-10-28", "verificacao": "indireta"}
+      ]
+    },
+    {
+      "chave": "folha", "nome": "Folha de S.Paulo", "pais": "BR", "idioma": "pt", "site": "https://www.folha.uol.com.br/", "ativo": false,
+      "nota": "Endereços conhecidos, não confirmados. Conteúdo com assinatura: o feed traz só título e resumo.",
+      "feeds": [
+        {"secao": "Em cima da hora", "url": "https://feeds.folha.uol.com.br/emcimadahora/rss091.xml", "categoria_sugerida": null, "verificado_em": null, "verificacao": "nao_verificada"},
+        {"secao": "Poder", "url": "https://feeds.folha.uol.com.br/poder/rss091.xml", "categoria_sugerida": "politica", "verificado_em": null, "verificacao": "nao_verificada"},
+        {"secao": "Mercado", "url": "https://feeds.folha.uol.com.br/mercado/rss091.xml", "categoria_sugerida": "economia", "verificado_em": null, "verificacao": "nao_verificada"},
+        {"secao": "Mundo", "url": "https://feeds.folha.uol.com.br/mundo/rss091.xml", "categoria_sugerida": "mundo", "verificado_em": null, "verificacao": "nao_verificada"},
+        {"secao": "Esporte", "url": "https://feeds.folha.uol.com.br/esporte/rss091.xml", "categoria_sugerida": "esportes", "verificado_em": null, "verificacao": "nao_verificada"}
+      ]
+    },
+    {"chave": "estadao", "nome": "O Estado de S. Paulo", "pais": "BR", "idioma": "pt", "site": "https://www.estadao.com.br/", "ativo": false,
+     "nota": "Feed não verificado. Cole o endereço oficial em 'Adicionar feed próprio'.", "feeds": []},
+    {"chave": "uol", "nome": "UOL", "pais": "BR", "idioma": "pt", "site": "https://www.uol.com.br/", "ativo": false,
+     "nota": "Feed não verificado. Cole o endereço oficial em 'Adicionar feed próprio'.", "feeds": []},
+    {"chave": "correio_do_povo", "nome": "Correio do Povo", "pais": "BR", "idioma": "pt", "site": "https://www.correiodopovo.com.br/", "ativo": false,
+     "nota": "Feed não verificado. Cole o endereço oficial em 'Adicionar feed próprio'.", "feeds": []},
+    {"chave": "gzh", "nome": "GZH", "pais": "BR", "idioma": "pt", "site": "https://gauchazh.clicrbs.com.br/", "ativo": false,
+     "nota": "Feed não verificado. Cole o endereço oficial em 'Adicionar feed próprio'.", "feeds": []},
+    {
+      "chave": "bbc_brasil", "nome": "BBC News Brasil", "pais": "GB", "idioma": "pt", "site": "https://www.bbc.com/portuguese", "ativo": false,
+      "nota": "Endereço conhecido, não confirmado.",
+      "feeds": [
+        {"secao": "Todas as notícias", "url": "https://feeds.bbci.co.uk/portuguese/rss.xml", "categoria_sugerida": null, "verificado_em": null, "verificacao": "nao_verificada"}
+      ]
+    },
+    {
+      "chave": "dw_brasil", "nome": "DW Brasil", "pais": "DE", "idioma": "pt", "site": "https://www.dw.com/pt-br/", "ativo": false,
+      "nota": "Endereço conhecido, não confirmado.",
+      "feeds": [
+        {"secao": "Todas as notícias", "url": "https://rss.dw.com/xml/rss-br-all", "categoria_sugerida": null, "verificado_em": null, "verificacao": "nao_verificada"}
+      ]
+    },
+    {
+      "chave": "guardian", "nome": "The Guardian", "pais": "GB", "idioma": "en", "site": "https://www.theguardian.com/", "ativo": false,
+      "nota": "Fonte internacional (inglês). Endereços conhecidos, não confirmados.",
+      "feeds": [
+        {"secao": "World", "url": "https://www.theguardian.com/world/rss", "categoria_sugerida": "mundo", "verificado_em": null, "verificacao": "nao_verificada"},
+        {"secao": "International", "url": "https://www.theguardian.com/international/rss", "categoria_sugerida": null, "verificado_em": null, "verificacao": "nao_verificada"}
+      ]
+    },
+    {
+      "chave": "bbc_news", "nome": "BBC News", "pais": "GB", "idioma": "en", "site": "https://www.bbc.com/news", "ativo": false,
+      "nota": "Fonte internacional (inglês). Endereços conhecidos, não confirmados.",
+      "feeds": [
+        {"secao": "Top stories", "url": "https://feeds.bbci.co.uk/news/rss.xml", "categoria_sugerida": null, "verificado_em": null, "verificacao": "nao_verificada"},
+        {"secao": "World", "url": "https://feeds.bbci.co.uk/news/world/rss.xml", "categoria_sugerida": "mundo", "verificado_em": null, "verificacao": "nao_verificada"}
+      ]
+    }
+  ]
+}
